@@ -1,0 +1,36 @@
+services:
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    network_mode: host
+    restart: unless-stopped
+    # Single-node KRaft mode (no Zookeeper) -- this is the lightweight
+    # prototype stand-in for a "Kafka-class" durable event bus. Deliberately
+    # no KAFKA_* env overrides: the image's entrypoint only applies its
+    # (already-correct, localhost:9092) single-node defaults when zero
+    # KAFKA_* vars are set -- setting even one disables that logic and
+    # requires specifying the entire KRaft config by hand.
+
+  zeek:
+    image: zeek/zeek:latest
+    container_name: zeek_monitor
+    depends_on:
+      - kafka
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./zeek/local.zeek:/usr/local/zeek/share/zeek/site/local.zeek
+      - ./zeek/scripts:/usr/local/zeek/share/zeek/site/scripts:ro
+      - ./backend/zeek-logs:/usr/local/zeek/logs/current
+      # Read-only pcaps for the dashboard's per-threat replay button (see
+      # /api/replay in app.py) -- a second, offline `zeek -r` invocation
+      # inside this same container reads from here into a scratch dir,
+      # never touching the live -i lo process or its working_dir above.
+      - ./traffic_pcaps:/pcaps:ro
+    working_dir: /usr/local/zeek/logs/current
+    command: >
+      zeek -C -i lo
+      /usr/local/zeek/share/zeek/site/local.zeek
+    restart: unless-stopped

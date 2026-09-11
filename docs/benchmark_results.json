@@ -1,0 +1,18 @@
+{
+  "measurement_scope": "Python detection-pipeline throughput only (detector.process() calls in a tight loop, matching stream_consumer.py's dispatch loop exactly) -- NOT a Kafka-broker round-trip measurement. No live Kafka broker was running in this environment (port 9092 unreachable) when this benchmark was run; see this script's module docstring for why that number isn't faked here.",
+  "sustained_flows_per_sec": 44.8,
+  "test_event_count": 10000,
+  "elapsed_seconds": 223.3442,
+  "alerts_produced_on_synthetic_stream": 1481,
+  "per_detector_latency_ms": {
+    "ddos": 40.8246,
+    "recon": 81.6176,
+    "c2": 13.6758,
+    "dga": 7.5235,
+    "tls": 4.0562,
+    "exfil": 4.0432
+  },
+  "bottleneck_finding": "Sustained throughput here is dominated by scikit-learn's per-call inference overhead, not by this codebase's own Python logic: a single RandomForest predict()+predict_proba() pair measured ~12ms/call in this environment (scikit-learn 1.9.0), and ddos.py/recon.py/c2.py each make that pair of calls per qualifying conn event. Verified directly: an unrealistically dense synthetic stream (events spaced ~0.01s apart) made ddos.py's/recon.py's rolling windows grow to thousands of unpruned entries and dominated cost instead -- an artifact of the generator, not a finding about the pipeline -- which is why this benchmark uses 0.5-3.0s spacing (see generate_synthetic_stream's docstring) to isolate the real steady-state bottleneck.",
+  "hardware": "12th Gen Intel Core i7-1255U, 12 logical cores, 14GiB RAM",
+  "timestamp": "2026-09-09T07:20:53Z"
+}

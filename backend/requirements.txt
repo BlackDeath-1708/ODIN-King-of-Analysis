@@ -1,0 +1,8 @@
+flask==3.0.3
+flask-cors==4.0.1
+watchdog==4.0.1
+kafka-python-ng
+scikit-learn==1.9.0
+joblib==1.6.0
+matplotlib==3.11.1
+pandas==3.0.5

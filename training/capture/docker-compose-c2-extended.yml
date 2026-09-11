@@ -1,0 +1,32 @@
+# Isolated Zeek instance for the C2 range-extension capture (widening
+# beyond the original capture_c2.py's 3-6s/<=15-beacon sessions, which is
+# why backend/detectors/c2.py only trusts its model within
+# observation_count<=11 and mean_interval<=7.0s -- see ML_MODELS.md's "C2's
+# range gate" section).
+#
+# Deliberately writes to a NEW log directory (../zeek-logs-c2ext, not
+# ../zeek-logs) and uses a distinct container_name/project name from both
+# docker-compose.yml and docker-compose-tls.yml in this same directory --
+# see docker-compose.yml's own comment for the real incident (~70 minutes
+# of a real capture silently lost) that this project-naming discipline
+# exists to prevent. Using a separate log directory entirely also means
+# this capture run can never truncate or interleave with the existing
+# ~294K-row training/zeek-logs/conn.log that the original ddos/recon/c2
+# datasets are built from, regardless of Zeek's log-file-open behavior on
+# container restart.
+name: ntro-training-capture-c2-extended
+services:
+  zeek_ml_capture_c2ext:
+    image: zeek/zeek:latest
+    container_name: zeek_ml_capture_c2ext
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./zeek/local.zeek:/usr/local/zeek/share/zeek/site/local.zeek
+      - ../zeek-logs-c2ext:/usr/local/zeek/logs/current
+    working_dir: /usr/local/zeek/logs/current
+    command: >
+      zeek -C -i lo
+      /usr/local/zeek/share/zeek/site/local.zeek

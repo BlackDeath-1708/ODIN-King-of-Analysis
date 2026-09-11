@@ -28,6 +28,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GroupKFold, train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 
+from metrics_utils import save_metrics
+
 REPO_ROOT    = Path(__file__).parent.parent
 DATASET      = REPO_ROOT / "training" / "dataset_exfil.csv"
 MODEL_OUT    = REPO_ROOT / "backend" / "ml_models" / "exfil_model.joblib"
@@ -73,6 +75,15 @@ def main():
     preds = final_model.predict(X_test)
     print("\nHeld-out test set classification report:")
     print(classification_report(y_test, preds, target_names=['benign', 'exfil'], zero_division=0))
+
+    save_metrics(
+        "exfil", y_test, preds,
+        n_train_rows=len(X_train), n_test_rows=len(X_test), grouping="group (unique per row)",
+        notes=(
+            "Majority REAL: real asymmetric HTTP transfers, real ICMP pings, real UDP bursts "
+            "to real public DNS resolvers, topped up with synthetic rows for class balance."
+        ),
+    )
 
     fit_groups, cal_groups = train_test_split(train_groups, test_size=0.25, random_state=42)
     fit_mask = df["group"].isin(fit_groups).values

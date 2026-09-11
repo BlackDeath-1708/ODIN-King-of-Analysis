@@ -15,6 +15,7 @@ backend/.producer_heartbeat
 
 training/zeek-logs/
 training/zeek-logs-tls/
+training/zeek-logs-c2ext/
 
 frontend/build/
 frontend/dist/

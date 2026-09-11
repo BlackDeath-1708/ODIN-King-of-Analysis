@@ -31,6 +31,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import confusion_matrix
 
+from metrics_utils import save_metrics
+
 REPO_ROOT = Path(__file__).parent.parent
 DATASET = REPO_ROOT / "training" / "dataset_recon.csv"
 MODEL_OUT = REPO_ROOT / "backend" / "ml_models" / "recon_model_v3.joblib"
@@ -115,6 +117,13 @@ X_test, y_test = X[test_mask], y[test_mask]
 
 final_model = RandomForestClassifier(n_estimators=200, max_depth=6, class_weight="balanced", random_state=42)
 final_model.fit(X_train_final, y_train_final)
+
+test_preds = final_model.predict(X_test)
+save_metrics(
+    "recon", y_test, test_preds,
+    n_train_rows=len(X_train_final), n_test_rows=len(X_test), grouping="session_id",
+    notes="Real nmap -sT TCP-connect scans + benign TCP connect() bursts, loopback.",
+)
 
 fit_groups, cal_groups = train_test_split(train_groups, test_size=0.25, random_state=42)
 fit_mask = df["session_id"].isin(fit_groups).values

@@ -57,6 +57,7 @@ REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from detectors.dga import extract_features  # noqa: E402
+from metrics_utils import save_metrics  # noqa: E402
 
 WORDLIST_PATH = REPO_ROOT / "backend" / "data" / "english_wordlist.txt"
 TRIGRAM_PATH  = REPO_ROOT / "backend" / "data" / "trigram_model.json"
@@ -239,6 +240,16 @@ def main():
     test_preds = final_model.predict(X_test)
     print("\nHeld-out test set classification report:")
     print(classification_report(y_test, test_preds, target_names=['benign', 'dga'], zero_division=0))
+
+    save_metrics(
+        "dga", y_test, test_preds,
+        n_train_rows=len(X_train), n_test_rows=len(X_test), grouping="query length bucket",
+        notes=(
+            "Fully synthetic: benign single-dictionary-word hostnames vs. 9 published-DGA-"
+            "algorithm-family generators (Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/"
+            "Ramnit/Banjori/Suppobox/Matsnu). No real malware DGA traffic used -- see ML_MODELS.md."
+        ),
+    )
 
     # Calibration hold-out: split X_train again into train/cal for Phase 3
     X_fit, X_cal, y_fit, y_cal = train_test_split(X_train, y_train, test_size=0.25, stratify=y_train, random_state=42)

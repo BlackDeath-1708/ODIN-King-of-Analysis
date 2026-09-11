@@ -3,53 +3,56 @@ C2 Beaconing Detector
 ---------------------
 Groups connections by (src, dst, dst_port) and looks for statistically
 regular inter-arrival timing -- the signature of programmatic beaconing
-rather than human-driven traffic. The final regularity judgment is now a
+rather than human-driven traffic. The final regularity judgment is a
 trained RandomForestClassifier (../../training/train_c2.py, real
-beacon-emulator traffic captured via ../../training/capture/capture_c2.py,
-GroupKFold-validated: F1 0.994 vs the old fixed CV-threshold rule's F1
-0.875 on 16,262 rows/114 sessions -- see ../../ML_MODELS.md) instead of
-the hand-picked `cv <= 0.35` cutoff, but ONLY while
-`observation_count <= MODEL_MAX_OBSERVATIONS`.
+beacon-emulator traffic -- see ../../ML_MODELS.md) instead of the
+hand-picked `cv <= 0.35` cutoff, but only while
+`observation_count <= MODEL_MAX_OBSERVATIONS` and
+`mean_interval <= MODEL_MAX_MEAN_INTERVAL`.
 
-That cap is not a style choice -- it's fixing a real, verified failure
-mode. The training data's benign sessions never accumulated more than 11
-real connection events (short sessions, sparse traffic by design), while
-c2 sessions routinely reached the full 20-observation cap. Checking
-`dataset_c2.csv` directly: every single row with `observation_count >= 12`
-is a c2 example -- ZERO benign examples exist in that region. A
-RandomForest has no way to learn what it was never shown, and in a region
-with no counterexamples it just predicts the only class it's ever seen
-there. Verified empirically: fed 15 observations of clearly irregular
-(CV~0.6-0.7, well above the 0.35 rule threshold) synthetic benign
-traffic, the *unrestricted* model false-positived 28/30 times (93%) --
-nowhere near the ~18% FP rate the (correctly-run) cross-validation
-reported, because that validation could only ever score the model on the
-same count<=11 region its training data actually covered. Below the cap,
-the model is genuinely validated and a real improvement (see
-ML_MODELS.md); above it, this falls back to the original CV rule, which
-has no such blind spot because it doesn't depend on having seen every
-count value during training.
+RANGE-GATE HISTORY (why these constants exist at all, and why they
+changed): the original training data's benign sessions never accumulated
+more than 11 real connection events, and no c2-labeled row had a mean
+beacon interval above ~6s (both by construction of a short, unattended
+bulk-capture run). A RandomForest given a region with zero counterexamples
+just predicts the only class it's ever seen there -- verified empirically
+at the time: 15 observations of clearly irregular (CV~0.6-0.7) synthetic
+benign traffic false-positived 28/30 times (93%) once forced outside that
+box, nowhere near the ~18% FP rate cross-validation reported (which could
+only ever score the region its training data covered).
 
-A second, same-shaped gap exists on `mean_interval`: every training
-session used a base beacon interval of 3-6s (kept short so the capture
-finished in a reasonable time -- see recon-ml-poc/capture_data_c2.py),
-so no c2-labeled training row has mean_interval above 6.01s. This
-project's own bundled demo pcap (traffic_pcaps/attack_c2.pcap) beacons
-every ~30s -- squarely in that unvalidated region. Confirmed live: replaying
-it still detects the beacon (the model hasn't seen zero counterexamples
-here the way it has for observation_count, since some benign rows *do*
-have mean_interval this high), but only at ~61% confidence, well below
-the 90%+ seen for in-range beacons, and later than the earliest possible
-observation. `MODEL_MAX_MEAN_INTERVAL` caps model use to the range it was
-actually trained on; the demo pcap's 30s beacon is handled by the rule
-instead, which was always designed for the full 3-600s range and fires
-confidently and immediately at 5 observations.
+EXTENSION (2026-09-11, ../../training/capture/capture_c2_extended.py):
+closed both blind spots with two new real session types -- "benign_long"
+(60-100s duration, long enough that some real benign sessions genuinely
+reach 12-20 observations) and "c2_slow" (8-45s base interval, +-15%
+jitter). Re-verified directly, the same way the original gap was found:
+`dataset_c2.csv` now has BOTH labels present in the `observation_count>=12`
+and `mean_interval>7.0` regions (previously one-class-only in each), the
+retrained model's held-out F1 in those specific regions is 1.000 (no
+degradation from the original range), and the same 93%-FP-style stress
+test (clearly-irregular, high-CV synthetic benign traffic) produced ZERO
+false positives when re-run across the newly-covered region -- feature
+importances (cv=0.60, std_interval=0.20, mean_interval=0.20,
+observation_count=0.006) suggest the model has genuinely learned a
+CV-based, largely scale-invariant regularity rule rather than memorizing
+the old training box, which is consistent with that result.
+
+This does NOT close the rule's full nominal 3-600s range -- the capture
+only reached 45s intervals in a background-runnable time budget (a single
+600s-interval session would take over an hour by itself; see
+capture_c2_extended.py's docstring). `MODEL_MAX_MEAN_INTERVAL=45.0`
+reflects exactly what was captured and stress-tested, not the rule's own
+theoretical ceiling. `MODEL_MAX_OBSERVATIONS=20` is no longer a meaningful
+gate in practice (observations are already capped at 20 below), kept as a
+named constant so the range-validation intent stays documented rather than
+silently disappearing. Revisit with a longer capture budget if a future
+stress test finds a new blind spot beyond 45s.
 
 MIN_OBSERVATIONS/MIN_INTERVAL/MAX_INTERVAL stay as sanity pre-conditions
 before consulting the model (matching what the training data assumed and
 avoiding feeding the model degenerate inputs like a near-zero mean
 interval) -- only the final regularity decision itself moved from a fixed
-CV cutoff to the trained boundary, within the region it was validated on.
+CV cutoff to the trained boundary, within the range it was validated on.
 
 MIN_INTERVAL is lower than a production deployment would use (which might
 require e.g. >=30s between beacons to rule out normal keep-alives) purely
@@ -72,14 +75,18 @@ CV_THRESHOLD     = 0.35   # coefficient of variation cutoff -- fallback rule, an
 MIN_INTERVAL     = 3      # ignore pairs faster than this (too fast to be a deliberate beacon)
 MAX_INTERVAL     = 600    # ignore pairs slower than this (10 min, too slow for a live demo)
 
-# The training data's benign sessions never reached higher than this many
-# real observations (see module docstring) -- trust the model strictly
-# within the range it has actual counterexamples for, rule outside it.
-MODEL_MAX_OBSERVATIONS = 11
+# Validated range after the 2026-09-11 capture extension (see module
+# docstring) -- both regions now have real counterexamples of both labels,
+# re-verified with the same stress-test methodology that found the
+# original gap. 20 is the detector's own observation-history cap (below),
+# so this is no longer a binding constraint in practice; kept named so the
+# range-validation intent doesn't silently disappear.
+MODEL_MAX_OBSERVATIONS = 20
 
-# No c2-labeled training row had a mean beacon interval above this (see
-# module docstring) -- beyond it the model is extrapolating, not recalling.
-MODEL_MAX_MEAN_INTERVAL = 7.0
+# Matches the range the extended capture actually reached (8-45s base
+# interval) -- beyond it the model is extrapolating, not recalling. Not
+# the rule's own 600s theoretical ceiling; see module docstring.
+MODEL_MAX_MEAN_INTERVAL = 45.0
 
 BASE_MODEL_PATH       = Path(__file__).parent.parent / "ml_models" / "c2_model.joblib"
 CALIBRATED_MODEL_PATH = Path(__file__).parent.parent / "ml_models" / "c2_model_calibrated.joblib"

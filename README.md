@@ -134,7 +134,7 @@ Apache Flink job later without changing a single line of detection logic.
 |---|---|---|---|---|
 | DDoS (SYN/UDP/spoofed) | RandomForest on flow-rate + port/src-IP entropy | `ddos_model_calibrated.joblib` | 1.000 | Yes |
 | Reconnaissance | RandomForest on fan-out (unique ports/hosts) features | `recon_model_v3_calibrated.joblib` | 1.000 | Yes |
-| C2 Beaconing | RandomForest on inter-arrival timing, range-gated | `c2_model_calibrated.joblib` | 0.994 | Yes |
+| C2 Beaconing | RandomForest on inter-arrival timing, range-gated | `c2_model_calibrated.joblib` | 0.9994 | Yes |
 | DGA / DNS Tunnelling | RandomForest (entropy/n-gram/word-boundary) + rule-based tunnel path | `dga_model_calibrated.joblib` | 0.99† | Yes |
 | TLS Malware (JA3) | JA3 blacklist lookup + RandomForest on flow stats | `tls_flow_model_calibrated.joblib` | 1.00‡ | Yes |
 | Data Exfiltration | Rule-based pattern pre-filter + RandomForest on flow-volume | `exfil_model_calibrated.joblib` | 1.00‡ | Yes |
@@ -199,11 +199,14 @@ below.
   timestamps.
 - **Features fed to the model:** `observation_count`, `mean_interval`,
   `std_interval`, `cv` (coefficient of variation).
-- **Validated result:** F1 0.994 vs. 0.875 for the old `cv <= 0.35` rule,
-  on 16,262 real rows from 114 real beacon-emulator capture sessions —
-  **but only within a specific, deliberately gated input range**
-  (`observation_count <= 11` and `mean_interval <= 7.0s`). Outside that
-  range the detector falls back to the rule. This gate isn't cosmetic: the
+- **Validated result:** F1 0.9994 (held-out, current model) vs. 0.839 for
+  the old `cv <= 0.35` rule, on 31,218 real rows from 144 real
+  beacon-emulator capture sessions (114 original + 30 from a 2026-09-11
+  range-extension capture — see below) — **within a deliberately gated
+  input range** (`observation_count <= 20` and `mean_interval <= 45.0s`,
+  widened from the original `<= 11`/`<= 7.0s` — see `ML_MODELS.md`'s "C2's
+  range gate" section for the full extension story). Outside that range
+  the detector falls back to the rule. This gate isn't cosmetic: the
   unrestricted model was found to false-positive 93% of the time on
   traffic outside its training data's coverage (verified empirically, not
   assumed) before the gate was added, and re-verified against the
@@ -360,12 +363,13 @@ trustworthy than raw model output:
   by a naive time-based cooldown — an issue found and fixed during review.
 - **C2 range-gating** — not a new feature so much as the detector's core
   honesty story: the model is trusted only within the input range its
-  training data actually covered (`observation_count <= 11`,
-  `mean_interval <= 7.0s`); outside it, the original CV-threshold rule
-  takes over, because a RandomForest predicting in a region with zero
-  training counterexamples isn't actually validated there. Full story,
-  including the 93% false-positive rate measured before this gate existed,
-  in `ML_MODELS.md`.
+  training data actually covers (`observation_count <= 20`,
+  `mean_interval <= 45.0s`, widened 2026-09-11 from the original
+  `<= 11`/`<= 7.0s`); outside it, the original CV-threshold rule takes
+  over, because a RandomForest predicting in a region with zero training
+  counterexamples isn't actually validated there. Full story, including
+  the 93% false-positive rate measured before the gate existed and the
+  re-verification after widening it, in `ML_MODELS.md`.
 
 ---
 
@@ -414,6 +418,7 @@ guessing at values it wasn't given.
 | `/api/pipeline-status` | GET | Real per-component health — see §8 |
 | `/api/throughput` | GET | Live events/sec through the pipeline |
 | `/api/detector_status` | GET | Per-detector model load status (ok/model_missing/error), which model file (calibrated vs. base) loaded, and its F1 |
+| `/api/model_metrics` | GET | Per-detector precision/recall/F1/false-positive-rate/false-negative-rate/confusion matrix (from each detector's own held-out test set) plus inference latency and pipeline throughput — see §11.5 |
 | `/api/replay/<threat>` | POST | Replays a pre-recorded pcap for one threat class — see §9 |
 | `/api/clear` | POST | Wipes `alerts.json` (demo reset) |
 | `/api/stream` | GET | Server-Sent Events — pushes new alerts as they're appended |
@@ -572,6 +577,37 @@ Run it yourself: `python scripts/benchmark_throughput.py`
 
 ---
 
+## 11.5. Per-detector evaluation metrics (precision / recall / FPR / FNR / confusion matrix)
+
+F1 alone doesn't answer "how many false positives do you generate" — a
+judge's question should get an immediate, sourced number rather than a dig
+through this file's prose. Every `training/train_*.py` script now evaluates
+its final, deployed model (the exact `.joblib` file loaded at runtime, not
+a temporarily-refit model from cross-validation) on a genuinely held-out
+test set and writes `docs/metrics/<detector>.json` via the shared
+`training/metrics_utils.py` helper: confusion matrix (TP/FP/TN/FN),
+precision, recall, F1, false-positive-rate, false-negative-rate, and
+accuracy, all derived from the same by-hand confusion-matrix arithmetic so
+every rate's definition is visible in one place rather than relying on
+`sklearn.classification_report`'s output (which doesn't expose FPR/FNR at
+all).
+
+`GET /api/model_metrics` merges these six files with
+`docs/benchmark_results.json`'s per-detector inference latency and reports
+both at request time — no separate aggregation step to go stale relative
+to either source. The Threat Analysis page's per-threat detail panel reads
+this endpoint directly (`DetectorMetrics.jsx`), so selecting a threat class
+shows its real precision/recall/F1/FPR/FNR, confusion matrix, and latency
+alongside the detector's other detail, not just a single F1 number.
+
+Regenerating these numbers after any retrain: re-run the relevant
+`training/train_*.py` script (it overwrites both the `.joblib` model and
+its `docs/metrics/<name>.json`), then re-run
+`calibration/calibrate_models.py` so the calibrated model file stays
+consistent with the freshly retrained base model.
+
+---
+
 ## 12. Repository layout
 
 ```
@@ -589,13 +625,16 @@ backend/
   data/                    trigram model, English wordlist, JA3 blacklist -- offline data the detectors load
 calibration/
   calibrate_models.py      Platt-scaling calibration (§5)
-training/                  training scripts for all six models; training/capture/ holds the
-                           real-traffic capture tooling for ddos/recon/c2 (hping3/nmap/beacon
-                           emulator + isolated Zeek container)
+training/                  training scripts for all six models; metrics_utils.py exports each
+                           final model's held-out precision/recall/F1/FPR/FNR (§11.5);
+                           training/capture/ holds the real-traffic capture tooling for
+                           ddos/recon/c2 (hping3/nmap/beacon emulator + isolated Zeek container)
 scripts/                   one-off tooling: trigram builder, JA3 blacklist downloader, throughput benchmark (§11)
 docs/
   calibration_plots/        reliability diagrams per calibrated model
   benchmark_results.json    output of scripts/benchmark_throughput.py
+  metrics/                  per-detector precision/recall/F1/FPR/FNR/confusion matrix (§11.5),
+                           one <detector>.json per training/train_*.py run
 zeek/local.zeek            Zeek config (JSON logging, conn/dns/ssl analyzers)
 traffic/                   live traffic generators for a manual demo
 traffic_pcaps/             pre-recorded pcaps for the Replay buttons + generator script

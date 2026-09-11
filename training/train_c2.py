@@ -40,6 +40,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import confusion_matrix
 
+from metrics_utils import save_metrics
+
 REPO_ROOT = Path(__file__).parent.parent
 DATASET = REPO_ROOT / "training" / "dataset_c2.csv"
 MODEL_OUT = REPO_ROOT / "backend" / "ml_models" / "c2_model.joblib"
@@ -64,19 +66,26 @@ print(f"Dataset: {len(df)} rows across {n_sessions} sessions "
 
 # Blind-spot check (see module docstring) -- print rather than assert, so
 # training doesn't hard-fail if the capture parameters ever change; a
-# human should read this before trusting c2.py's existing range-gate
-# constants (MODEL_MAX_OBSERVATIONS=11, MODEL_MAX_MEAN_INTERVAL=7.0)
-# against this new dataset.
+# human should read this before trusting c2.py's range-gate constants
+# against this dataset. Checks two boundaries: the ORIGINAL gate (11/7.0,
+# closed by the 2026-09-11 range-extension capture -- both labels should
+# be present here now) and the CURRENT gate (20/45.0) -- if that one ever
+# comes back one-class-only, c2.py's MODEL_MAX_OBSERVATIONS/
+# MODEL_MAX_MEAN_INTERVAL need re-tightening, the same way the original
+# gap was found.
 high_count = df[df["observation_count"] >= 12]
 if len(high_count):
-    print(f"[blind-spot check] observation_count>=12: {len(high_count)} rows, "
-          f"labels present: {sorted(high_count['label'].unique())} "
-          f"(c2.py's MODEL_MAX_OBSERVATIONS=11 assumes this region is c2-only)")
+    print(f"[blind-spot check] observation_count>=12 (original gate boundary): "
+          f"{len(high_count)} rows, labels present: {sorted(high_count['label'].unique())}")
 high_interval = df[df["mean_interval"] > 7.0]
 if len(high_interval):
-    print(f"[blind-spot check] mean_interval>7.0: {len(high_interval)} rows, "
-          f"labels present: {sorted(high_interval['label'].unique())} "
-          f"(c2.py's MODEL_MAX_MEAN_INTERVAL=7.0 assumes benign has no counterexamples above this)")
+    print(f"[blind-spot check] mean_interval>7.0 (original gate boundary): "
+          f"{len(high_interval)} rows, labels present: {sorted(high_interval['label'].unique())}")
+beyond_current_gate = df[df["mean_interval"] > 45.0]
+if len(beyond_current_gate):
+    print(f"[blind-spot check] mean_interval>45.0 (CURRENT gate boundary): "
+          f"{len(beyond_current_gate)} rows, labels present: {sorted(beyond_current_gate['label'].unique())} "
+          f"-- if one-class-only, MODEL_MAX_MEAN_INTERVAL=45.0 is no longer safely validated")
 
 N_SPLITS = 10
 gkf = GroupKFold(n_splits=N_SPLITS)
@@ -146,6 +155,19 @@ X_test, y_test = X[test_mask], y[test_mask]
 
 final_model = RandomForestClassifier(n_estimators=200, max_depth=6, class_weight="balanced", random_state=42)
 final_model.fit(X_train_final, y_train_final)
+
+test_preds = final_model.predict(X_test)
+save_metrics(
+    "c2", y_test, test_preds,
+    n_train_rows=len(X_train_final), n_test_rows=len(X_test), grouping="session_id",
+    notes=(
+        "Real beacon-emulator traffic + benign TCP connect() bursts, loopback, plus a "
+        "2026-09-11 range-extension capture (benign_long/c2_slow sessions). Model trusted "
+        "live within observation_count<=20 and mean_interval<=45.0s -- see "
+        "backend/detectors/c2.py and ML_MODELS.md for the range-gate rationale. This "
+        "held-out set includes both the original and extended-range sessions."
+    ),
+)
 
 fit_groups, cal_groups = train_test_split(train_groups, test_size=0.25, random_state=42)
 fit_mask = df["session_id"].isin(fit_groups).values

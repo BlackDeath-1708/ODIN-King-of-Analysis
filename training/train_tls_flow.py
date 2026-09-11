@@ -40,6 +40,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GroupKFold, train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 
+from metrics_utils import save_metrics
+
 REPO_ROOT    = Path(__file__).parent.parent
 DATASET      = REPO_ROOT / "training" / "dataset_tls.csv"
 MODEL_OUT    = REPO_ROOT / "backend" / "ml_models" / "tls_flow_model.joblib"
@@ -87,6 +89,15 @@ def main():
     preds = model.predict(X_test)
     print("\nHeld-out test set classification report:")
     print(classification_report(y_test, preds, target_names=['benign', 'malicious'], zero_division=0))
+
+    save_metrics(
+        "tls", y_test, preds,
+        n_train_rows=len(X_train), n_test_rows=len(X_test), grouping="domain",
+        notes=(
+            "Benign REAL (actual HTTPS/QUIC sessions to ~157 distinct real domains). "
+            "Malicious class SYNTHETIC (no ethical real-malware-traffic source) -- see ML_MODELS.md."
+        ),
+    )
 
     fit_groups, cal_groups = train_test_split(train_groups, test_size=0.25, random_state=42)
     fit_mask = df["domain"].isin(fit_groups).values

@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 1583,
+    "fp": 0,
+    "tn": 1518,
+    "fn": 0
+  },
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "false_positive_rate": 0.0,
+  "false_negative_rate": 0.0,
+  "accuracy": 1.0,
+  "test_set_size": 3101,
+  "detector": "exfil",
+  "n_train_rows": 12400,
+  "n_test_rows": 3101,
+  "grouping": "group (unique per row)",
+  "notes": "Majority REAL: real asymmetric HTTP transfers, real ICMP pings, real UDP bursts to real public DNS resolvers, topped up with synthetic rows for class balance.",
+  "generated_at": "2026-09-11T07:46:13Z"
+}

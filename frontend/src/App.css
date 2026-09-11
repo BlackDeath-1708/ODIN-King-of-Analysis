@@ -608,6 +608,116 @@
   color: var(--status-offline);
 }
 
+/* Model Evaluation Metrics -- ThreatAnalysisPage, per selected detector */
+.detector-metrics {
+  padding: var(--space-4) 18px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.detector-metrics__title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.detector-metrics__source {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.detector-metrics__empty {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.detector-metrics__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-3);
+}
+
+.detector-metrics__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.detector-metrics__stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.detector-metrics__stat-value {
+  font-size: var(--text-md);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.detector-metrics__confusion-title {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.detector-metrics__confusion-table {
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+}
+
+.detector-metrics__confusion-table th,
+.detector-metrics__confusion-table td {
+  padding: 6px var(--space-3);
+  border: 1px solid var(--border);
+  text-align: right;
+}
+
+.detector-metrics__confusion-table th {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: left;
+  background: var(--bg-inset);
+}
+
+.detector-metrics__confusion-table td.is-fp,
+.detector-metrics__confusion-table td.is-fn {
+  color: var(--status-warning);
+  font-weight: 700;
+}
+
+.detector-metrics__throughput,
+.detector-metrics__notes {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.detector-metrics__notes code,
+.detector-metrics__empty code,
+.detector-metrics__throughput code {
+  font-family: var(--font-mono);
+  background: var(--bg-inset);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
 /* ==================================================
    Architecture page
    ================================================== */

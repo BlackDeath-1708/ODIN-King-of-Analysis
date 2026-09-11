@@ -107,7 +107,14 @@ folds.
 |---|---|---|---|---|
 | DDoS (RandomForest) | 29,844 | 247 | 0.912 | 1.000 |
 | Recon (RandomForest) | 17,674 | 175 | 0.983 | 1.000 |
-| C2 (RandomForest, gated) | 16,262 | 114 | 0.875 | 0.994 |
+| C2 (RandomForest, gated) | 31,218 | 144 | 0.839 | 0.998 |&nbsp;†
+
+† C2's row/session count and rule F1 reflect the 2026-09-11 range-extension
+capture (see "C2's range gate" section below) layered onto the original
+16,262-row/114-session capture -- the rule's F1 dropped from 0.875 to
+0.839 because the new c2_slow sessions' real-world timing jitter pushes
+some genuinely-c2 rows' CV just past the rule's fixed 0.35 cutoff at
+longer intervals, not because the rule regressed on the original range.
 
 DDoS and recon are clean, low-cost improvements: the DDoS rule missed 842
 of 6,161 flood rows in validation (pooled confusion matrix; mostly "low and
@@ -397,6 +404,82 @@ row with `mean_interval > 7.0` is still benign-only (91/91) — so `c2.py`'s
 existing `MODEL_MAX_OBSERVATIONS=11`/`MODEL_MAX_MEAN_INTERVAL=7.0` gate
 constants remain correct with no code change needed.
 
+## C2 range-gate extension (2026-09-11) — closing the blind spots rather than just documenting them
+
+The two blind spots above were real findings, not permanent limitations --
+`training/capture/capture_c2_extended.py` closes both with two new real
+session types, captured against an isolated Zeek instance the same way the
+original data was:
+
+- **benign_long** (60-100s duration, 3-6s mean gap): long enough that some
+  real benign sessions genuinely accumulate 12-20 connection events --
+  targets the `observation_count>=12` blind spot with real, not
+  synthetic, counterexamples.
+- **c2_slow** (8-45s base interval, +-15% jitter, 6-10 beacons): targets
+  the `mean_interval>7.0` blind spot the same way.
+
+This deliberately does NOT attempt the rule's full nominal 3-600s range in
+one pass -- a single 600s-interval session with 10+ beacons would take
+over an hour of real wall-clock time by itself (this capture needs actual
+time to pass between every beacon, same constraint as the original
+capture). 15 pairs (30 sessions, 1,708 raw conn.log lines, 408 real
+connection events, ~78 minutes real wall-clock time) were captured, kept
+in a separate log directory/sessions file
+(`training/zeek-logs-c2ext/`, `sessions_c2_extended.json`) and appended
+onto the original dataset via `training/build_dataset_c2_extended.py`
+rather than rebuilt from a from-scratch merge -- see that script's
+docstring for why: an initial attempt to make `build_dataset_c2.py` read
+two conn.log sources directly found that `training/zeek-logs/conn.log`
+(a single file shared across every ddos/recon/c2/tls/quic capture
+campaign this project has run) had its original C2-session raw evidence
+silently overwritten by later, unrelated campaigns that reused the same
+Zeek container/log path -- a real, previously-undiscovered gap in this
+project's own capture hygiene, caught only because rebuilding from
+scratch produced zero matching events on the C2 port pool where hundreds
+were expected. `training/dataset_c2_original.csv` is now a frozen
+snapshot of the already-validated, git-committed 16,262-row dataset
+specifically so future extensions never depend on that raw evidence
+still being recoverable.
+
+**Re-verified with the same methodology that found the original gap**:
+- Both blind spots are closed at the dataset level: `observation_count>=12`
+  now has 4,056 rows with **both** labels present (previously c2-only),
+  and `mean_interval>7.0` now has 10,683 rows with **both** labels present
+  (previously benign-only).
+- The retrained model's held-out F1 **within just the newly-covered
+  region** is 1.000 (704 test rows for `observation_count` 12-20: 400 TP,
+  304 TN, 0 FP, 0 FN; 3,379 test rows for `mean_interval` 7-45s, entirely
+  c2-labeled in this particular random test split but still 0 errors) --
+  no degradation relative to the original range.
+- **The 93%-false-positive stress test was re-run against the new region**
+  (clearly-irregular, CV 0.6-0.9 synthetic benign-intent traffic fed
+  directly to the retrained model): 0/100 false positives for
+  `observation_count` 12-20 combined with `mean_interval` 7-45s, and 0/100
+  even when probed at `mean_interval` 45-100s -- **beyond** the captured
+  range. Feature importances on the retrained model (`cv`=0.599,
+  `std_interval`=0.200, `mean_interval`=0.195, `observation_count`=0.006)
+  show `cv` remains overwhelmingly dominant, consistent with the model
+  having learned a genuine, largely scale-invariant regularity rule rather
+  than memorizing the old training box -- which is the most likely reason
+  the stress test came back clean even slightly past the captured 45s
+  boundary. That result is reassuring but not itself validation: the gate
+  constant is still set to what was actually captured (45.0s), not
+  extended further on the strength of one synthetic probe.
+- `backend/detectors/c2.py`'s gate constants were updated accordingly:
+  `MODEL_MAX_OBSERVATIONS` 11→20 (now equal to the detector's own
+  observation-history cap, so no longer a binding constraint in practice --
+  kept as a named constant so the range-validation intent stays documented)
+  and `MODEL_MAX_MEAN_INTERVAL` 7.0→45.0 (matching exactly what was
+  captured and stress-tested, not the rule's own 600s theoretical
+  ceiling).
+
+**What this does NOT claim**: the model is not validated for beacons
+slower than 45s (up to the rule's 600s design ceiling), which still falls
+back to the original CV-threshold rule -- unchanged, and still correct
+there since it has no training-coverage dependency. Closing that remaining
+gap would need a longer capture budget (hours, not ~80 minutes) run the
+same way.
+
 ## Honest limitations (carried over from validation, not fixed by deploying)
 
 - **Single test host**: all three training captures ran entirely against
@@ -589,7 +672,7 @@ way `train_dga.py`/`train_exfil.py`/`train_tls_flow.py` already did — so
 |---|---|---|---|
 | DDoS | Yes | 0.250 (see caveat below) | `ddos_model_calibrated.joblib` |
 | Recon | Yes | 0.266 (see caveat below) | `recon_model_v3_calibrated.joblib` |
-| C2 | Yes | 0.194 (see caveat below) | `c2_model_calibrated.joblib` |
+| C2 | Yes | 0.172 (see caveat below) | `c2_model_calibrated.joblib` |
 | DGA | Yes | 0.396 (see caveat below) | `dga_model_calibrated.joblib` |
 | TLS flow-stats | Yes | 0.239 (see caveat below) | `tls_flow_model_calibrated.joblib` |
 | Exfiltration | Yes | 0.052 | `exfil_model_calibrated.joblib` |

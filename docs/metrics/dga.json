@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 2572,
+    "fp": 4,
+    "tn": 1196,
+    "fn": 28
+  },
+  "precision": 0.9984,
+  "recall": 0.9892,
+  "f1": 0.9938,
+  "false_positive_rate": 0.0033,
+  "false_negative_rate": 0.0108,
+  "accuracy": 0.9916,
+  "test_set_size": 3800,
+  "detector": "dga",
+  "n_train_rows": 15200,
+  "n_test_rows": 3800,
+  "grouping": "query length bucket",
+  "notes": "Fully synthetic: benign single-dictionary-word hostnames vs. 9 published-DGA-algorithm-family generators (Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/Ramnit/Banjori/Suppobox/Matsnu). No real malware DGA traffic used -- see ML_MODELS.md.",
+  "generated_at": "2026-09-11T07:45:59Z"
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import AlertFeed from '../components/AlertFeed'
+import DetectorMetrics from '../components/DetectorMetrics'
 
 // Evidence signals listed here are the fields the corresponding detector
 // already emits in `alert.evidence` per the fixed API contract — nothing
@@ -180,6 +181,10 @@ function ThreatAnalysisPage({ stats, alerts }) {
             ))}
           </ul>
         </div>
+      </div>
+
+      <div className="panel">
+        <DetectorMetrics detectorKey={selected} label={definition.label} />
       </div>
 
       <AlertFeed alerts={relatedAlerts} />

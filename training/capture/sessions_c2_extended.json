@@ -1,0 +1,242 @@
+[
+  {
+    "label": "benign_long_0_start",
+    "ts": 1789114653.169082
+  },
+  {
+    "label": "benign_long_0_end",
+    "ts": 1789114720.3114424
+  },
+  {
+    "label": "c2_slow_0_start",
+    "ts": 1789114720.311488
+  },
+  {
+    "label": "c2_slow_0_end",
+    "ts": 1789115028.5861595
+  },
+  {
+    "label": "benign_long_1_start",
+    "ts": 1789115028.5863445
+  },
+  {
+    "label": "benign_long_1_end",
+    "ts": 1789115104.143783
+  },
+  {
+    "label": "c2_slow_1_start",
+    "ts": 1789115104.1438134
+  },
+  {
+    "label": "c2_slow_1_end",
+    "ts": 1789115500.8915744
+  },
+  {
+    "label": "benign_long_2_start",
+    "ts": 1789115500.8916497
+  },
+  {
+    "label": "benign_long_2_end",
+    "ts": 1789115602.6499672
+  },
+  {
+    "label": "c2_slow_2_start",
+    "ts": 1789115602.6499858
+  },
+  {
+    "label": "c2_slow_2_end",
+    "ts": 1789115881.7655838
+  },
+  {
+    "label": "benign_long_3_start",
+    "ts": 1789115881.7656786
+  },
+  {
+    "label": "benign_long_3_end",
+    "ts": 1789115969.45315
+  },
+  {
+    "label": "c2_slow_3_start",
+    "ts": 1789115969.4531722
+  },
+  {
+    "label": "c2_slow_3_end",
+    "ts": 1789116089.831673
+  },
+  {
+    "label": "benign_long_4_start",
+    "ts": 1789116089.8317652
+  },
+  {
+    "label": "benign_long_4_end",
+    "ts": 1789116168.4187477
+  },
+  {
+    "label": "c2_slow_4_start",
+    "ts": 1789116168.4187727
+  },
+  {
+    "label": "c2_slow_4_end",
+    "ts": 1789116416.2075632
+  },
+  {
+    "label": "benign_long_5_start",
+    "ts": 1789116416.207634
+  },
+  {
+    "label": "benign_long_5_end",
+    "ts": 1789116501.296878
+  },
+  {
+    "label": "c2_slow_5_start",
+    "ts": 1789116501.2968993
+  },
+  {
+    "label": "c2_slow_5_end",
+    "ts": 1789116600.3152835
+  },
+  {
+    "label": "benign_long_6_start",
+    "ts": 1789116600.3153973
+  },
+  {
+    "label": "benign_long_6_end",
+    "ts": 1789116700.7882702
+  },
+  {
+    "label": "c2_slow_6_start",
+    "ts": 1789116700.7883058
+  },
+  {
+    "label": "c2_slow_6_end",
+    "ts": 1789116848.7186418
+  },
+  {
+    "label": "benign_long_7_start",
+    "ts": 1789116848.7187686
+  },
+  {
+    "label": "benign_long_7_end",
+    "ts": 1789116923.937236
+  },
+  {
+    "label": "c2_slow_7_start",
+    "ts": 1789116923.937261
+  },
+  {
+    "label": "c2_slow_7_end",
+    "ts": 1789116995.0424147
+  },
+  {
+    "label": "benign_long_8_start",
+    "ts": 1789116995.042477
+  },
+  {
+    "label": "benign_long_8_end",
+    "ts": 1789117080.8324091
+  },
+  {
+    "label": "c2_slow_8_start",
+    "ts": 1789117080.8497927
+  },
+  {
+    "label": "c2_slow_8_end",
+    "ts": 1789117263.05495
+  },
+  {
+    "label": "benign_long_9_start",
+    "ts": 1789117263.0551116
+  },
+  {
+    "label": "benign_long_9_end",
+    "ts": 1789117358.898657
+  },
+  {
+    "label": "c2_slow_9_start",
+    "ts": 1789117358.8986828
+  },
+  {
+    "label": "c2_slow_9_end",
+    "ts": 1789117649.8047762
+  },
+  {
+    "label": "benign_long_10_start",
+    "ts": 1789117649.8048413
+  },
+  {
+    "label": "benign_long_10_end",
+    "ts": 1789117756.2470694
+  },
+  {
+    "label": "c2_slow_10_start",
+    "ts": 1789117756.2470982
+  },
+  {
+    "label": "c2_slow_10_end",
+    "ts": 1789117994.8808835
+  },
+  {
+    "label": "benign_long_11_start",
+    "ts": 1789117994.880949
+  },
+  {
+    "label": "benign_long_11_end",
+    "ts": 1789118098.3508449
+  },
+  {
+    "label": "c2_slow_11_start",
+    "ts": 1789118098.3508728
+  },
+  {
+    "label": "c2_slow_11_end",
+    "ts": 1789118193.646595
+  },
+  {
+    "label": "benign_long_12_start",
+    "ts": 1789118193.646694
+  },
+  {
+    "label": "benign_long_12_end",
+    "ts": 1789118294.0856445
+  },
+  {
+    "label": "c2_slow_12_start",
+    "ts": 1789118294.0856771
+  },
+  {
+    "label": "c2_slow_12_end",
+    "ts": 1789118531.2817564
+  },
+  {
+    "label": "benign_long_13_start",
+    "ts": 1789118531.2818604
+  },
+  {
+    "label": "benign_long_13_end",
+    "ts": 1789118630.4175377
+  },
+  {
+    "label": "c2_slow_13_start",
+    "ts": 1789118630.4175708
+  },
+  {
+    "label": "c2_slow_13_end",
+    "ts": 1789119016.1519756
+  },
+  {
+    "label": "benign_long_14_start",
+    "ts": 1789119016.152066
+  },
+  {
+    "label": "benign_long_14_end",
+    "ts": 1789119093.8692691
+  },
+  {
+    "label": "c2_slow_14_start",
+    "ts": 1789119093.869321
+  },
+  {
+    "label": "c2_slow_14_end",
+    "ts": 1789119336.1638296
+  }
+]

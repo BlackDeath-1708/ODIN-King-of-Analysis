@@ -8,6 +8,8 @@ import joblib
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
+import alert_export
+
 app = Flask(__name__)
 CORS(app)
 
@@ -51,6 +53,27 @@ def get_alerts():
     limit = int(request.args.get("limit", 100))
     alerts = read_alerts(limit)
     return jsonify(alerts)
+
+@app.route("/api/alerts/stix")
+def get_alerts_stix():
+    """STIX 2.1 Bundle export, for air-gapped SOC/TIP integration (PS
+    26145's standardized-alert-schema requirement) -- see alert_export.py.
+    On-demand pull; stream_consumer.py also writes this continuously to
+    backend/alerts.stix.jsonl for a tailing integration."""
+    limit = int(request.args.get("limit", 100))
+    bundle = alert_export.to_stix_bundle(read_alerts(limit))
+    return Response(json.dumps(bundle), mimetype="application/stix+json")
+
+
+@app.route("/api/alerts/cef")
+def get_alerts_cef():
+    """CEF syslog-line export, for air-gapped SOC/SIEM integration -- see
+    alert_export.py. On-demand pull; stream_consumer.py also writes this
+    continuously to backend/alerts.cef.log for a tailing integration."""
+    limit = int(request.args.get("limit", 100))
+    lines = alert_export.to_cef_lines(read_alerts(limit))
+    return Response("\n".join(lines), mimetype="text/plain")
+
 
 @app.route("/api/stats")
 def get_stats():

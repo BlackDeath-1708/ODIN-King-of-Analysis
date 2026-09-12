@@ -1,0 +1,55 @@
+{
+  "measurement_scope": "Real end-to-end pipeline throughput (Zeek -i lo live capture -> Kafka -> stream_consumer.py -> detectors -> alerts.json), NOT an isolated Python-loop micro-benchmark (see scripts/benchmark_throughput.py for that). Single self-contained 12-core mobile laptop (i7-1255U) running the capture, broker, and detector pipeline on the same cores as this load generator -- not dedicated hardware, not a real NIC (loopback only). Numbers here reflect single-laptop self-contained capacity, not a production appliance.",
+  "generator_config": {
+    "workers": 30,
+    "payload_bytes": 2048,
+    "duration_seconds": 25.0,
+    "rate_cap_per_sec": 300.0
+  },
+  "generator_offered": {
+    "connections": 7470,
+    "bytes_sent": 15298560,
+    "elapsed_seconds": 25.098,
+    "flows_per_sec": 297.63,
+    "mbps": 4.876
+  },
+  "pipeline_observed": {
+    "baseline_total_events": 1006,
+    "final_total_events": 1829,
+    "events_per_sec_samples": [
+      21.3,
+      21.1,
+      21.0,
+      22.0,
+      22.2,
+      22.1,
+      22.0,
+      21.9,
+      22.0,
+      21.7,
+      21.5,
+      21.6,
+      21.5,
+      21.4,
+      21.2,
+      21.1,
+      21.0,
+      20.9,
+      21.3,
+      21.3,
+      21.4,
+      21.4,
+      21.3,
+      21.2,
+      21.3
+    ],
+    "peak_events_per_sec": 22.2,
+    "avg_events_per_sec": 21.47
+  },
+  "alert_latency": {
+    "count": 0,
+    "note": "No alerts fired during the benchmark window (benign load, expected)."
+  },
+  "hardware": "12 logical cores (see docs/benchmark_results.json for the exact CPU model)",
+  "generated_at": "2026-09-12T09:17:39.777560Z"
+}

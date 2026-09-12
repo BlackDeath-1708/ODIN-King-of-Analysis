@@ -1214,3 +1214,92 @@ top of the frozen trained net, saved to
 the alert -- verified directly: the `calibrated` field on a Tier-2-driven
 alert now reads `True` only because the calibration file loaded, not
 because Tier 1 happened to be calibrated.
+
+## Real E2E throughput benchmark, and a real correlator bug it found (2026-09-12)
+
+A PS-26145 compliance review flagged the existing benchmark
+(`scripts/benchmark_throughput.py`) as too weak a throughput claim: it's a
+pure in-process Python loop calling `detector.process()` directly, with no
+Kafka, no Zeek, no network I/O -- its own `measurement_scope` field
+already says so. Added `scripts/benchmark_e2e.py`, a sibling (not a
+replacement) that generates real traffic against the *live* pipeline
+(Zeek `-i lo` capture -> Kafka -> `stream_consumer.py` -> detectors ->
+`alerts.json`) and measures what the pipeline itself sustained, via a
+self-contained `asyncio` TCP swarm (no `iperf3`/`tcpreplay` -- neither is
+installed and there's no passwordless sudo to install them unattended;
+`app.py`'s own `/api/replay` endpoint already made the same call for the
+same reason). Short connect->send->close cycles per worker (not held-open
+connections), matching `traffic/generate_c2.py`'s existing convention --
+Zeek only logs a connection on close, so held-open connections would
+produce a batchy, misleading throughput series instead of a real one.
+
+**First run found a real, serious bug, not a benchmark artifact.** The
+sink server initially never replied, making every generated flow
+maximally byte-asymmetric -- exactly `exfil.py`'s own detection signature.
+900 exfil alerts fired in ~25s, and `correlator.py`'s `C2_EXFIL` pattern
+fired a *new* `MULTI_VECTOR` alert on every single one of them (its dedup
+only suppresses when nothing new contributed, and every flow has a unique
+`flow_id`, so under a sustained burst nothing ever gets suppressed by
+design) -- each firing embedding an ever-growing `contributing_alerts`
+list (~1+2+...+900, roughly 405,000 embedded entries total across all
+firings). That bloated `alerts.json` enough that reading it back via
+`/api/alerts` **OOM-killed the live Flask process** (confirmed via
+`dmesg`: `Out of memory: Killed process ... (python3) ... anon-rss:
+6010412kB`). Fixed at the source, not by making the test gentler:
+`correlator.py`'s `_make_correlated` now caps `contributing_alerts` to the
+most recent `MAX_CONTRIBUTING_ALERTS = 20` entries -- bounds every
+correlated alert's size regardless of burst length, without changing
+which alerts count for the re-fire dedup (still correctly avoids missing
+a second, genuinely distinct attack chain). Also fixed the benchmark's
+own sink to echo the payload back (byte_ratio ~= 1.0, a real
+request/response shape) so it's a clean capacity test rather than an
+inadvertent (if correctly detected) exfil stress test.
+
+**Real numbers** (`docs/benchmark_e2e_results.json`, rerun after both
+fixes): generator offered 297.6 flows/sec / 4.88 Mbps (30 workers, 2KB
+payloads, 25s, rate-capped); the *pipeline* sustained ~21-22 events/sec at
+steady state -- a real, measured gap between offered and sustained load,
+consistent with the existing isolated-loop benchmark's ~44.8 flows/sec
+ceiling (scikit-learn `predict()` call overhead dominates either way).
+Explicitly scoped, same honesty convention as the original benchmark: a
+single 12-core mobile laptop running the capture, broker, and detectors
+on the same cores as the load generator -- not dedicated hardware, not a
+real NIC.
+
+## STIX 2.1 + CEF alert export (2026-09-12)
+
+A second compliance gap: the internal alert schema (`base.py`) already
+has every field PS 26145 literally lists (timestamp, flow_id,
+threat_class, confidence, evidence), but nothing exported it in a format
+an air-gapped SOC's SIEM/TIP would actually ingest. Added
+`backend/alert_export.py` -- `to_stix_indicator`/`to_stix_bundle` (STIX
+2.1, hand-rolled with stdlib `uuid`/`datetime` rather than the `stix2`
+library, since STIX 2.1 Indicator objects are simple enough to get right
+without an unverified-for-this-repo's-Python-3.14.4-venv new dependency)
+and `to_cef_line`/`to_cef_lines` (CEF syslog format, no widely-used
+library exists for it either way). Purely additive: takes the existing
+alert dict unchanged, zero changes to `base.py`, any detector, or the
+correlator.
+
+The real constraint this had to handle: `evidence` is not uniform across
+detectors -- a `list[str]` for ddos/recon/c2, a flat `dict` for
+dga/exfil/tls, and a `dict` with a nested `list` for the correlator's
+`MULTI_VECTOR` alerts. Both exporters just JSON-serialize `evidence`
+as-is rather than type-branching, which is correct for all three shapes.
+CEF escaping needed to be precise, not approximate: header fields escape
+`|`/`\`; extension *values* escape `=`/`\`/newlines -- and the JSON-encoded
+evidence blob needs CEF-escaping applied on top of, not instead of, JSON's
+own `"`-escaping, since JSON doesn't cover CEF's `=`/`|` delimiters.
+
+Two integration points, both live and verified against real alerts:
+**on-demand** (`GET /api/alerts/stix`, `GET /api/alerts/cef`, reusing the
+existing `read_alerts()`), and **continuous** (`write_alert()` in
+`stream_consumer.py` now also appends to `backend/alerts.cef.log` and
+`backend/alerts.stix.jsonl` on every alert -- the realistic air-gapped-SOC
+integration point, since CEF's whole purpose is syslog-style tailing).
+The continuous appends are best-effort (`try/except Exception`, logged
+and swallowed) and strictly *after* the existing `alerts.json` write, so
+a future malformed-evidence shape in some new detector can never crash
+the consumer loop or leave the canonical, dashboard-relied-on
+`alerts.json` inconsistent -- `write_alert()` had no error handling at
+all before this change.

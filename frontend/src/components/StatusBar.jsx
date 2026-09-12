@@ -9,6 +9,9 @@ function StatusBar({ stats, throughput }) {
     { key: 'ddos', label: 'DDoS DETECTED', value: stats.ddos ?? 0, accent: 'var(--threat-ddos)' },
     { key: 'recon', label: 'RECON DETECTED', value: stats.recon ?? 0, accent: 'var(--threat-recon)' },
     { key: 'c2', label: 'C2 BEACONING', value: stats.c2 ?? 0, accent: 'var(--threat-c2)' },
+    { key: 'dga', label: 'DGA / DNS TUNNEL', value: stats.dga ?? 0, accent: 'var(--threat-dga)' },
+    { key: 'tls', label: 'TLS MALWARE', value: stats.tls ?? 0, accent: 'var(--threat-tls)' },
+    { key: 'exfil', label: 'EXFILTRATION', value: stats.exfil ?? 0, accent: 'var(--threat-exfil)' },
   ]
 
   return (

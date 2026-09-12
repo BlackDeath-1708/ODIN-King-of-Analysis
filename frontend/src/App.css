@@ -1478,10 +1478,102 @@
   padding: 12px 0;
 }
 
+.threat-chart__body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
 .threat-chart__rows {
+  flex: 1 1 220px;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* ThreatDonut */
+.threat-donut {
+  position: relative;
+  flex: 0 0 auto;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto;
+}
+
+.threat-donut__svg circle {
+  transition: stroke-dasharray 0.3s ease;
+}
+
+.threat-donut__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.threat-donut__center-value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.threat-donut__center-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* AlertsTimeline */
+.alerts-timeline {
+  padding: var(--space-4) 18px;
+}
+
+.alerts-timeline__subtitle {
+  margin: 2px 0 14px;
+}
+
+.alerts-timeline__chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  width: 100%;
+}
+
+.alerts-timeline__bar-slot {
+  flex: 1 1 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 4px;
+}
+
+.alerts-timeline__bar {
+  width: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 2px 2px 0 0;
+  overflow: hidden;
+  min-height: 2px;
+  background: var(--border);
+}
+
+.alerts-timeline__segment {
+  width: 100%;
+}
+
+.alerts-timeline__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
 }
 
 .threat-chart__row {

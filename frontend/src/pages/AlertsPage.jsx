@@ -11,6 +11,10 @@ const THREAT_FILTERS = [
   { value: 'ddos', label: 'DDoS', accent: 'var(--threat-ddos)' },
   { value: 'recon', label: 'Recon', accent: 'var(--threat-recon)' },
   { value: 'c2', label: 'C2', accent: 'var(--threat-c2)' },
+  { value: 'dga', label: 'DGA', accent: 'var(--threat-dga)' },
+  { value: 'tls', label: 'TLS', accent: 'var(--threat-tls)' },
+  { value: 'exfil', label: 'Exfil', accent: 'var(--threat-exfil)' },
+  { value: 'MULTI_VECTOR', label: 'Multi-Vector', accent: 'var(--threat-multi-vector)' },
 ]
 
 // Keyed by the backend's actual severity strings — never numeric, never guessed.
@@ -47,6 +51,9 @@ function AlertsPage({ alerts, stats }) {
     { key: 'ddos', label: 'DDoS', value: stats?.ddos ?? 0, accent: 'var(--threat-ddos)' },
     { key: 'recon', label: 'Recon', value: stats?.recon ?? 0, accent: 'var(--threat-recon)' },
     { key: 'c2', label: 'C2', value: stats?.c2 ?? 0, accent: 'var(--threat-c2)' },
+    { key: 'dga', label: 'DGA', value: stats?.dga ?? 0, accent: 'var(--threat-dga)' },
+    { key: 'tls', label: 'TLS', value: stats?.tls ?? 0, accent: 'var(--threat-tls)' },
+    { key: 'exfil', label: 'Exfil', value: stats?.exfil ?? 0, accent: 'var(--threat-exfil)' },
   ]
 
   // Distinguishes "no filtered results" from "no alerts exist" — the latter

@@ -1,3 +1,5 @@
+import ThreatDonut from './ThreatDonut'
+
 // Displays threat distribution only — no data fetching, no state ownership.
 const THREAT_CATEGORIES = [
   { key: 'ddos', label: 'DDoS / SYN Flood', accent: 'var(--threat-ddos)' },
@@ -27,29 +29,32 @@ function ThreatChart({ stats, subtitle }) {
       {sum === 0 ? (
         <div className="threat-chart__empty">No threats detected</div>
       ) : (
-        <div className="threat-chart__rows">
-          {counts.map((category) => {
-            const barWidth = maxCount > 0 ? (category.count / maxCount) * 100 : 0
-            const percent = sum > 0 ? Math.round((category.count / sum) * 100) : null
+        <div className="threat-chart__body">
+          <ThreatDonut categories={counts} total={sum} />
+          <div className="threat-chart__rows">
+            {counts.map((category) => {
+              const barWidth = maxCount > 0 ? (category.count / maxCount) * 100 : 0
+              const percent = sum > 0 ? Math.round((category.count / sum) * 100) : null
 
-            return (
-              <div key={category.key} className="threat-chart__row">
-                <div className="threat-chart__row-header">
-                  <span className="threat-chart__row-label">{category.label}</span>
-                  <span className="threat-chart__row-count" style={{ color: category.accent }}>
-                    {category.count}
-                    {percent !== null ? ` · ${percent}%` : ''}
-                  </span>
+              return (
+                <div key={category.key} className="threat-chart__row">
+                  <div className="threat-chart__row-header">
+                    <span className="threat-chart__row-label">{category.label}</span>
+                    <span className="threat-chart__row-count" style={{ color: category.accent }}>
+                      {category.count}
+                      {percent !== null ? ` · ${percent}%` : ''}
+                    </span>
+                  </div>
+                  <div className="threat-chart__track">
+                    <div
+                      className="threat-chart__fill"
+                      style={{ width: `${barWidth}%`, background: category.accent }}
+                    />
+                  </div>
                 </div>
-                <div className="threat-chart__track">
-                  <div
-                    className="threat-chart__fill"
-                    style={{ width: `${barWidth}%`, background: category.accent }}
-                  />
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       )}
     </div>

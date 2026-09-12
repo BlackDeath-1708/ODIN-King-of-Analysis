@@ -16,8 +16,16 @@ the previous single generic "random string" generator, and is the standard
 way DGA classifiers are built/evaluated in published research when the
 DGArchive dataset itself isn't available.
 
-  BENIGN (label=0): single dictionary words as the hostname label (mimics
-    real short brand-style domains: "github.com", "reddit.net"), common TLDs.
+  BENIGN (label=0): two generators. gen_benign() -- single dictionary words
+    as the hostname label (mimics real short brand-style domains:
+    "github.com", "reddit.net"), common TLDs. gen_real_domain_traffic()
+    (added 2026-09-11, see its own docstring below) -- real, well-known
+    domains combined with realistic subdomain prefixes/depths
+    ("time.cloudflare.com", "api.globalping.io"), closing a real gap found
+    via live ambient traffic: the model had never seen the
+    subdomain.domain.tld shape that the overwhelming majority of real DNS
+    traffic actually uses, nor a real brand apex that isn't itself a
+    dictionary word, and false-positived at 95-100% confidence on both.
   RANDOM-CHARSET families (label=1): CONFICKER (short, length 4-9, small
     TLD set), CRYPTOLOCKER (longer, length 12-20), ZEUS_GAMEOVER (MD5-hash-
     derived 16-char label, mimicking its hash-based generation), NECURS
@@ -86,6 +94,72 @@ def gen_benign(words: list, n: int) -> list:
         word = random.choice(words)
         tld = random.choice(COMMON_TLDS)
         out.append((f"{word}.{tld}", 0))
+    return out
+
+
+# Real, well-known second-level domains, spanning the shapes that actually
+# dominate real-world DNS traffic -- discovered as a real gap (2026-09-11
+# PS-compliance/live-traffic review): the ambient DNS traffic on this dev
+# machine (VS Code's main.vscode-cdn.net, Cloudflare's time.cloudflare.com,
+# a globalping probe's api.globalping.io, a Datadog agent's
+# http-intake.logs.us5.datadoghq.com) false-positived at 95-100% DGA
+# confidence. Root cause verified directly: the bare apex alone
+# (cloudflare.com, globalping.io) scored correctly low, but the identical
+# domain with an ordinary subdomain prefix scored high -- gen_benign()
+# above only ever produced a bare `word.tld` (single label, always a real
+# dictionary word), so the model had literally never seen the
+# subdomain.domain.tld shape that the overwhelming majority of real DNS
+# traffic actually uses, nor a real brand name that isn't itself a
+# dictionary word (datadoghq, vscode-cdn). Both gaps are closed below by
+# training on real, well-known domains (not synthetic dictionary words)
+# combined with realistic subdomain prefixes and TLDs.
+REAL_APEX_DOMAINS = [
+    'google.com', 'youtube.com', 'facebook.com', 'amazon.com', 'wikipedia.org',
+    'twitter.com', 'instagram.com', 'linkedin.com', 'reddit.com', 'netflix.com',
+    'microsoft.com', 'apple.com', 'github.com', 'githubusercontent.com', 'gitlab.com',
+    'stackoverflow.com', 'cloudflare.com', 'akamai.net', 'akamaiedge.net', 'fastly.net',
+    'cloudfront.net', 'digitalocean.com', 'linode.com', 'godaddy.com', 'namecheap.com',
+    'mozilla.org', 'ubuntu.com', 'canonical.com', 'debian.org', 'docker.com',
+    'kubernetes.io', 'python.org', 'nodejs.org', 'npmjs.com', 'pypi.org',
+    'letsencrypt.org', 'digicert.com', 'globalsign.com', 'datadoghq.com', 'newrelic.com',
+    'sentry.io', 'globalping.io', 'vscode-cdn.net', 'visualstudio.com', 'jetbrains.com',
+    'slack.com', 'zoom.us', 'dropbox.com', 'box.com', 'atlassian.com',
+    'salesforce.com', 'oracle.com', 'ibm.com', 'adobe.com', 'spotify.com',
+    'paypal.com', 'stripe.com', 'shopify.com', 'wordpress.com', 'squarespace.com',
+    'yahoo.com', 'bing.com', 'duckduckgo.com', 'protonmail.com', 'icloud.com',
+    'samsung.com', 'intel.com', 'nvidia.com', 'amd.com', 'cisco.com',
+    'notion.so', 'vercel.app', 'react.dev', 'anthropic.ai', 'openai.com',
+    'figma.com', 'linear.app', 'render.com', 'railway.app', 'netlify.app',
+]
+REAL_SUBDOMAIN_PREFIXES = [
+    'www', 'api', 'cdn', 'mail', 'static', 'img', 'assets', 'docs', 'app', 'portal',
+    'secure', 'login', 'time', 'ns1', 'ns2', 'mx', 'smtp', 'vpn', 'media', 'video',
+    'dl', 'download', 'support', 'help', 'status', 'blog', 'shop', 'm', 'id', 'auth',
+    'edge', 'cache', 'proxy', 'gateway', 'us5', 'us1', 'eu1', 'ap1', 'client',
+    'analytics', 'telemetry', 'metrics', 'sync', 'update', 'logs', 'http-intake',
+    'events', 'push', 'ws', 'stream', 'accounts',
+]
+
+
+def gen_real_domain_traffic(n: int) -> list:
+    """Real, well-known domains (not synthetic dictionary words) combined
+    with realistic subdomain prefixes and depths -- see the gap this
+    closes in the comment above REAL_APEX_DOMAINS. Roughly half bare apex
+    (matches the original gen_benign() shape, kept for continuity), half
+    with one or two realistic subdomain levels prepended (the shape that
+    actually dominates real DNS traffic)."""
+    out = []
+    for _ in range(n):
+        apex = random.choice(REAL_APEX_DOMAINS)
+        roll = random.random()
+        if roll < 0.35:
+            query = apex
+        elif roll < 0.80:
+            query = f"{random.choice(REAL_SUBDOMAIN_PREFIXES)}.{apex}"
+        else:
+            p1, p2 = random.sample(REAL_SUBDOMAIN_PREFIXES, 2)
+            query = f"{p1}.{p2}.{apex}"
+        out.append((query, 0))
     return out
 
 
@@ -195,6 +269,7 @@ def main():
 
     samples = (
         gen_benign(words, 6000)
+        + gen_real_domain_traffic(6000)
         + gen_conficker(1500)
         + gen_cryptolocker(1500)
         + gen_zeus_gameover(1500)
@@ -245,9 +320,12 @@ def main():
         "dga", y_test, test_preds,
         n_train_rows=len(X_train), n_test_rows=len(X_test), grouping="query length bucket",
         notes=(
-            "Fully synthetic: benign single-dictionary-word hostnames vs. 9 published-DGA-"
-            "algorithm-family generators (Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/"
-            "Ramnit/Banjori/Suppobox/Matsnu). No real malware DGA traffic used -- see ML_MODELS.md."
+            "Fully synthetic malicious class (9 published-DGA-algorithm-family generators: "
+            "Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/Ramnit/Banjori/Suppobox/Matsnu). "
+            "Benign class mixes single-dictionary-word hostnames with real, well-known domains "
+            "plus realistic subdomain prefixes/depths (added 2026-09-11 after the bare-word-only "
+            "generator false-positived on real ambient DNS traffic -- see ML_MODELS.md's "
+            "'DGA benign-distribution gap' section). No real malware DGA traffic used."
         ),
     )
 

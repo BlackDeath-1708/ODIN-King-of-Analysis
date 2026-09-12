@@ -1,5 +1,6 @@
 import StatusBar from '../components/StatusBar'
 import ThreatChart from '../components/ThreatChart'
+import AlertsTimeline from '../components/AlertsTimeline'
 import AlertFeed from '../components/AlertFeed'
 import HybridPipeline from '../components/HybridPipeline'
 import ActiveDetectors from '../components/ActiveDetectors'
@@ -25,6 +26,8 @@ function OverviewPage({ stats, throughput, connected, alerts, onNavigate }) {
       )}
 
       <StatusBar stats={stats} throughput={throughput} />
+
+      <AlertsTimeline alerts={alerts} />
 
       <div className="overview-grid">
         <div className="overview-grid__left">

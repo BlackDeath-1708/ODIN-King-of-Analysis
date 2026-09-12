@@ -662,6 +662,18 @@ larger real-traffic retraining run entirely inside `training/` — see
   generator. Malicious-class data for TLS/exfil is still synthetic (no
   ethical real-malware-traffic source exists for either) — see
   `ML_MODELS.md`.
+- **DGA's benign class was found to false-positive on real ambient DNS
+  traffic** (this machine's own background queries, not synthetic —
+  498/500 alerts in one live session) because the original synthetic
+  benign generator only ever produced a bare `word.tld`, never the
+  `subdomain.domain.tld` shape that essentially all real DNS traffic
+  uses. Fixed by training on real, well-known domains combined with
+  realistic subdomain prefixes; re-verified against domains deliberately
+  excluded from training (zero false positives) with no loss of
+  detection on real malicious-shaped strings. Full root-cause writeup in
+  `ML_MODELS.md`'s "DGA benign-distribution gap" section — including the
+  honest caveat that this closes the *verified* gap, not every possible
+  one, since there's no live domain-reputation feed backing this up.
 - **All 6 models are now Platt-calibrated**, but 5 of 6 (all but
   Exfiltration) had a calibration shift exceeding this project's own 0.15
   sanity bound — documented rather than hidden; read as those base models

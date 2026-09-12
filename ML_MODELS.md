@@ -480,6 +480,84 @@ there since it has no training-coverage dependency. Closing that remaining
 gap would need a longer capture budget (hours, not ~80 minutes) run the
 same way.
 
+## DGA benign-distribution gap found via live ambient traffic (2026-09-11)
+
+Running the live demo pipeline against this machine's own ordinary background
+DNS traffic (not synthetic, not a deliberate attack) surfaced a real,
+significant false-positive source: within minutes, the DGA detector flagged
+**498 of 500 total alerts** as `DGA / DNS Tunnelling`, all from completely
+legitimate queries -- `time.cloudflare.com` (Cloudflare's NTP-over-HTTPS
+check), `api.globalping.io` (the `globalping-probe` service also running on
+this machine), `main.vscode-cdn.net` (VS Code), and
+`http-intake.logs.us5.datadoghq.com` (a Datadog agent) -- at 95-100%
+confidence, repeating every few seconds with no dedup.
+
+**Root cause, verified directly**: the bare apex domain alone
+(`cloudflare.com`, `globalping.io`) scored correctly low (~0.002), but the
+*identical* domain with an ordinary subdomain prefix scored high
+(`time.cloudflare.com` 0.950, `api.globalping.io` 0.978). `gen_benign()` in
+`training/train_dga.py` only ever produced a bare `word.tld` -- a single
+label, always a real dictionary word, directly under the TLD. Real DNS
+traffic is overwhelmingly `subdomain.domain.tld` or deeper; the benign
+training class had **never once** included that shape, so the model was
+extrapolating on nearly every real-world query it saw, not just some
+fraction -- the same category of bug as the C2 range-gate blind spot found
+earlier this session, just far more consequential here because the gap
+covers the common case rather than an edge case.
+
+A second, compounding gap: some apex domains that aren't literal English
+dictionary words (`datadoghq`, `vscode-cdn`) scored as DGA-like even in the
+exact bare-apex training shape, because `gen_benign()`'s benign class was
+built exclusively from real dictionary words, never real-but-uncommon brand
+names.
+
+**Fix**: `training/train_dga.py` gained `gen_real_domain_traffic()` -- real,
+well-known domains (Google, Cloudflare, GitHub, Anthropic, Vercel, ~75
+entries, not synthetic dictionary words) combined with realistic subdomain
+prefixes (`www`, `api`, `cdn`, `mail`, `us5`, `http-intake`, ~50 entries) at
+varying depths (bare apex / one subdomain / two), added as 6,000 additional
+benign rows alongside the original `gen_benign()` output. `backend/detectors/
+dga.py`'s `KNOWN_TLDS` also gained five modern legitimate TLDs (`ai`, `dev`,
+`app`, `so`, `me`) after a held-out real domain (`api.notion.so`, not in the
+curated list) still false-positived at 95.6% post-retrain -- DGA/botnet
+operators overwhelmingly favor cheap, bulk-registerable ccTLDs
+(`.ru`/`.cn`/`.info`/`.biz`/`.top`/`.xyz`, all still absent from
+`KNOWN_TLDS`) over these curated, stricter-registration ones, so this is not
+expected to meaningfully help malicious domains evade detection.
+
+**Re-verified, not just re-trained**: held-out F1 unchanged at 0.994 (no
+accuracy regression on the original malicious families). Directly tested
+against the four real domains that caused the flood plus five additional
+real, popular domains **deliberately excluded from the training list**
+(`cdn.discordapp.com`, `static.xx.fbcdn.net`, `app.slack.com`,
+`api.stripe.com`, `registry.npmjs.org`) as a genuine generalization check,
+not a memorization check -- all nine cleared at <0.1% confidence. Three
+real malicious-shaped strings (a random DGA-style string, a Suppobox-style
+dictionary-DGA domain, and a random string on a suspicious TLD) all still
+correctly fired at 100% confidence -- zero false negatives introduced.
+
+**Defense in depth, independent of the accuracy fix**: `dga.py`'s Path B
+(the ML classifier, not the tunnel rule) also gained a per-`(src_ip, query)`
+300-second cooldown, matching `ddos.py`/`recon.py`'s existing event-time-keyed
+cooldown idiom -- even a genuinely-anomalous domain that legitimately
+repeats (e.g. a real misconfiguration, not just this bug) shouldn't flood
+the alert feed once every few seconds. Path A (the tunnel rule) is
+deliberately NOT gated by this, since each tunnel query carries its own
+distinct encoded payload by construction -- per-query dedup there would
+suppress genuinely new evidence, not repeat noise. Verified directly: a
+repeated malicious-shaped query alerts once, is suppressed within the
+300s window, and alerts again once the window passes.
+
+**What this does NOT claim**: this is not a claim of zero false positives
+against arbitrary real-world traffic -- only that the specific, verified
+gap (common subdomain shapes of well-known and popular-but-untrained-on
+domains) is closed. A sufficiently obscure or newly-registered legitimate
+domain with an unusual shape could still trigger a false positive; this
+prototype has no live domain-reputation feed to fall back on, only the
+generalization the retrained model has learned from ~150 curated
+domain/prefix combinations. Widening coverage further would mean training
+against a real top-domains list (e.g. Tranco) rather than a hand-curated one.
+
 ## Honest limitations (carried over from validation, not fixed by deploying)
 
 - **Single test host**: all three training captures ran entirely against

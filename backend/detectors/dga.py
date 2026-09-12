@@ -46,7 +46,19 @@ from pathlib import Path
 
 from .base import Detector
 
-KNOWN_TLDS = {'com', 'net', 'org', 'gov', 'edu', 'io', 'co', 'uk', 'de', 'fr', 'us'}
+KNOWN_TLDS = {
+    'com', 'net', 'org', 'gov', 'edu', 'io', 'co', 'uk', 'de', 'fr', 'us',
+    # Added 2026-09-11: modern TLDs now common for legitimate SaaS/dev-tool
+    # branding (notion.so, vercel.app, react.dev, anthropic.ai) -- found
+    # missing when a real, previously-unseen domain (api.notion.so) still
+    # false-positived as DGA at 95%+ confidence after the broader
+    # gen_real_domain_traffic() retraining fixed the more common cases.
+    # DGA/botnet operators overwhelmingly favor cheap, bulk-registerable
+    # ccTLDs (.ru/.cn/.info/.biz/.top/.xyz, all still absent here) over
+    # these curated, stricter-registration TLDs, so this addition is not
+    # expected to meaningfully help malicious domains evade detection.
+    'ai', 'dev', 'app', 'so', 'me',
+}
 SKIP_QTYPES = {'PTR'}
 SKIP_SUFFIXES = ('.local', '.internal', '.arpa')
 
@@ -126,6 +138,16 @@ def extract_features(query: str, trigram_model: dict, wordlist: set) -> list:
     ]
 
 
+ALERT_COOLDOWN = 300  # one Path-B alert per (src_ip, query) per 300s of *event* time --
+                      # matches ddos.py/recon.py's cooldown idiom (event-time keyed, not
+                      # wall-clock). Added 2026-09-11 after live ambient DNS traffic showed
+                      # a single repeatedly-resolved query re-alerting every few seconds
+                      # (real apps/OS resolvers re-query well inside typical record TTLs).
+                      # Path A (tunnel) is NOT gated by this: each tunnel query carries its
+                      # own distinct encoded payload by construction, so per-query dedup
+                      # would suppress genuinely new evidence, not repeat noise.
+
+
 class DGADetector(Detector):
     name = "dga"
     threat_class = "dga"
@@ -135,6 +157,7 @@ class DGADetector(Detector):
         self.model, self.calibrated = self._load_model()
         self.trigram_model = self._load_json(TRIGRAM_PATH)
         self.wordlist = self._load_wordlist()
+        self._last_alerted = {}  # (src_ip, query) -> event ts of last Path-B alert
 
     @staticmethod
     def _load_model():
@@ -210,10 +233,14 @@ class DGADetector(Detector):
         # Path B: DGA ML classifier
         if self.model is None:
             return None
+        cooldown_key = (src_ip, query)
+        if ts - self._last_alerted.get(cooldown_key, 0) < ALERT_COOLDOWN:
+            return None
         features = extract_features(query, self.trigram_model, self.wordlist)
         proba = float(self.model.predict_proba([features])[0][1])
         if proba <= 0.70:
             return None
+        self._last_alerted[cooldown_key] = ts
 
         feat_dict = dict(zip(FEATURE_NAMES, features))
         detection_path = "DICT_DGA" if feat_dict["word_boundary_score"] > 0.65 else "RANDOM_DGA"

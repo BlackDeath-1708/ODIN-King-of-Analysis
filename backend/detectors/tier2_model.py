@@ -113,5 +113,19 @@ def load_tier2_model(path: Path = MODEL_PATH, calibration_path: Path = CALIBRATI
         cal = np.load(calibration_path)
         return Tier2Model(net, a=float(cal["a"]), b=float(cal["b"]), calibrated=True)
     except Exception as e:
-        print(f"[tls] tier2 calibration unavailable ({e}) -- serving raw uncalibrated sigmoid")
-        return Tier2Model(net, calibrated=False)
+        # Unlike Tier 1 (whose raw RandomForest score is still on a
+        # meaningful 0-1 scale even without calibration), Tier 2's raw
+        # sigmoid is NOT safely comparable to the 0.72/0.85 thresholds
+        # tls_malware.py applies -- the fitted Platt slope on real training
+        # runs was ~31x, meaning the raw logits are tightly compressed near
+        # the decision boundary and get badly stretched by calibration.
+        # Serving that raw, wrongly-scaled score to override Tier 1's
+        # already-calibrated proba would silently reintroduce the exact
+        # scale-mismatch bug calibration was added to fix. train_tier2.py
+        # itself documents this as a real, already-occurring case (a
+        # single-class calibration split skips saving this file) -- so
+        # treat "no calibration" the same as "no model at all" for Tier 2
+        # specifically, rather than degrading to an unsafe raw score.
+        print(f"[tls] tier2 calibration unavailable ({e}) -- Tier-1-only mode "
+              f"(raw tier2 sigmoid is not safely comparable to calibrated thresholds)")
+        return None

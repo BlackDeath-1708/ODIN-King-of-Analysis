@@ -1128,3 +1128,89 @@ precision cost on ordinary traffic. The two-path coverage already
 verified above is the better trade: a tight rule for the record types
 that are almost always evidence of something, and a general classifier
 picking up the rest.
+
+## Tier-2 confidence-gated seq-CNN for TLS malware (2026-09-12)
+
+Path B's RandomForest (tls_flow_model.joblib) only ever sees scalar
+aggregates of the packet-size/gap sequence (mean/std) -- see
+`_flow_features()`'s comment on why (RandomForest has no native
+variable-length input support). A second model that looks at the *raw*
+sequence can catch subtler shapes the aggregates wash out, but running it
+on every flow would cost real per-event latency for no benefit on the
+~90% of flows Tier 1 already calls confidently.
+
+Added a **confidence gate**: Tier 1's proba is already Platt-calibrated
+(`calibration/calibrate_models.py`), so `0.4 <= proba <= 0.7` is a
+genuinely ambiguous probability band, not an arbitrary cut on a raw score.
+Only flows landing in that band get a second opinion from a compact 1D-CNN
+(`backend/detectors/tier2_model.py`) over the first 12 packets'
+sizes/gaps (`backend/detectors/tier2_features.py`), which then *replaces*
+(not supplements) Tier 1's proba for the final `> 0.72` decision.
+`evidence.detection_method` becomes `'flow_stats_ml+tier2_seq_cnn'` when
+Tier 2 fired, `'flow_stats_ml'` otherwise -- verified end-to-end with a
+mocked Tier-1/Tier-2 pair: Tier 2 is invoked exactly when proba is
+in-band and never otherwise, and its output alone determines whether an
+in-band flow ends up alerting.
+
+CNN chosen over a GRU: 12 timesteps is too short for recurrence to earn
+its keep over local pattern-matching, and a CNN is easier to keep small
+(~3k params: two Conv1d layers, global max-pool over the packet axis so
+padding is naturally inert, two FC layers) and well-regularized on a
+dataset that's still partly synthetic (see below). `torch==2.14.0+cpu`
+added to `backend/requirements.txt` -- confirmed a real `cp314` wheel
+exists for this repo's Python 3.14.4 venv before committing to it.
+
+**Training data, honestly**: same real-malware-TLS-traffic gap
+`build_dataset_tls.py` already documents for Tier 1's malicious class
+(no ethical real-world source existed at the time) -- except this time
+addressed rather than left as a caveat. Pulled a real CTU-13 botnet
+capture (Stratosphere Lab, scenario `CTU-Malware-Capture-Botnet-42`
+/Neris, CC-BY licensed, ground-truth-labeled) via
+`training/build_malicious_pcap_logs.py` (a disposable `docker run` against
+`zeek/zeek:latest`, not the live demo container) +
+`training/build_dataset_tls_seq.py` (joins Zeek's conn.log 5-tuple against
+the scenario's own argus `Botnet`-labeled flows). That scenario's capture
+contains 63 total SSL/QUIC sessions with a packet sequence, of which
+**13** matched a ground-truth Botnet 5-tuple riding port 443 -- small
+(most of that scenario's 71 raw Botnet/443 flows are `S_RA`/`S_`-state
+TCP-Attempt rows with no completed handshake, so no ssl.log entry at all;
+13 is what's left after that), but genuinely real, not synthetic-
+generator-fingerprinting. Tagged with a `provenance` column (alongside
+5,402 synthetic-malicious rows kept as a comparison arm, not deleted) so
+train_tier2.py can report real vs. synthetic held-out recall separately
+as a standing sanity check against a model that only fits the generator
+-- with only one real-malicious group so far, that split's held-out slot
+came up empty this run (the single group landed entirely in train), which
+is itself an honest artifact of n=13 rather than a bug. `SCENARIO_LABELS`
+in build_dataset_tls_seq.py is a one-line-per-scenario dict specifically
+so trying more CTU-13/Stratosphere scenarios is additive, not a rewrite.
+
+Trained on real-benign + 13 real-malicious + synthetic-malicious:
+`docs/metrics/tls_tier2.json` -- precision=1.0, recall=0.520,
+F1=0.684 on held-out synthetic malicious rows (real-malicious held-out
+count was 0 this run, see above). The recall ceiling here is expected
+and not a regression to chase yet: 40 epochs on a deliberately tiny net
+against a still mostly-synthetic dataset -- the point of this pass was
+proving the gate/schema/graceful-degrade/calibration plumbing, not tuning
+accuracy against data that's still mostly not real. Retraining (once more
+real-malicious rows land) is `training/build_dataset_tls_seq.py` +
+`training/train_tier2.py`, no other code changes -- `tls_tier2_model.pt`
+gets overwritten in place.
+
+**Calibration**: a code-review pass on this feature caught a real issue
+here worth recording -- the first version reused Tier 1's `calibrated`
+flag (and its 0.72/0.85 severity thresholds) for Tier-2-driven alerts too,
+mislabeling a raw CNN sigmoid as a Platt-calibrated probability, and
+comparing it against thresholds tuned for a differently-distributed
+calibrated score. Fixed the same way `calibration/calibrate_models.py`
+calibrates the other 6 (sklearn) models -- `train_tier2.py` now fits a
+1-D Platt scaling (`calibrated_logit = a*raw_logit + b`, via
+`sklearn.linear_model.LogisticRegression` on a held-out group split) on
+top of the frozen trained net, saved to
+`backend/ml_models/tls_tier2_calibration.npz`. `tier2_model.py`'s
+`Tier2Model.calibrated` reflects whether that file loaded, and
+`tls_malware.py` now reports `calibrated=self.tier2_model.calibrated`
+(not `self.calibrated`, Tier 1's flag) whenever Tier 2 actually decided
+the alert -- verified directly: the `calibrated` field on a Tier-2-driven
+alert now reads `True` only because the calibration file loaded, not
+because Tier 1 happened to be calibrated.

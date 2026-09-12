@@ -16,6 +16,8 @@ backend/.producer_heartbeat
 training/zeek-logs/
 training/zeek-logs-tls/
 training/zeek-logs-c2ext/
+training/zeek-logs-tls-malicious/
+training/malicious_pcaps_raw/
 
 frontend/build/
 frontend/dist/

@@ -26,6 +26,7 @@ from pathlib import Path
 
 from kafka import KafkaConsumer
 
+import alert_export
 from detectors import ACTIVE_DETECTORS
 from correlation.correlator import CorrelationEngine
 
@@ -33,6 +34,8 @@ KAFKA_BOOTSTRAP = "localhost:9092"
 TOPICS          = ["zeek-conn", "zeek-dns", "zeek-ssl", "zeek-quic", "zeek-pktseq"]
 GROUP_ID        = "ntro-stream-consumer"
 ALERTS_FILE     = Path("alerts.json")
+CEF_FILE        = Path("alerts.cef.log")
+STIX_FILE       = Path("alerts.stix.jsonl")
 HEARTBEAT_FILE  = Path(".heartbeat")
 THROUGHPUT_FILE = Path(".throughput")
 THROUGHPUT_WINDOW_SECONDS = 10
@@ -279,6 +282,25 @@ def write_alert(alert: dict):
     with open(ALERTS_FILE, "a") as f:
         f.write(json.dumps(alert) + "\n")
     print(f"[ALERT] {alert['threat_label']} detected | confidence={alert['confidence']} | src={alert['src_ip']}")
+
+    # Continuous STIX 2.1 / CEF export for air-gapped SOC/SIEM/TIP tailing
+    # (see backend/alert_export.py). Best-effort and strictly AFTER the
+    # alerts.json write above -- alerts.json is the canonical record the
+    # dashboard/API already rely on, so a crash mid-export must never leave
+    # it inconsistent, and a future malformed/unexpected evidence shape in
+    # a new detector must never crash this consumer loop over a cosmetic
+    # export failure (write_alert() itself has no other error handling,
+    # unlike write_throughput()/touch_heartbeat() below).
+    try:
+        with open(CEF_FILE, "a") as f:
+            f.write(alert_export.to_cef_line(alert) + "\n")
+    except Exception as e:
+        print(f"[ALERT_EXPORT] CEF export failed ({e}) -- alerts.json write above is unaffected")
+    try:
+        with open(STIX_FILE, "a") as f:
+            f.write(json.dumps(alert_export.to_stix_bundle([alert])) + "\n")
+    except Exception as e:
+        print(f"[ALERT_EXPORT] STIX export failed ({e}) -- alerts.json write above is unaffected")
 
 
 def touch_heartbeat():

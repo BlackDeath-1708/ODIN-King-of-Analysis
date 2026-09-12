@@ -30,6 +30,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 CORRELATION_WINDOW = 600  # seconds -- the outer prune bound; each pattern also has its own window
+MAX_CONTRIBUTING_ALERTS = 20  # see _make_correlated's docstring -- bounds a real memory-growth bug
 
 
 class CorrelationEngine:
@@ -108,6 +109,22 @@ class CorrelationEngine:
         return None
 
     def _make_correlated(self, src_ip, pattern, confidence, severity, window, records) -> dict:
+        # A sustained burst from one source (e.g. many exfil-shaped flows in
+        # a short window) can produce hundreds of `records` here, and this
+        # method fires once per new contributing alert (see ingest()'s
+        # dedup, which only suppresses when nothing NEW contributed -- so a
+        # flood of distinct flows never gets suppressed by design). Without
+        # a cap, evidence.contributing_alerts grows ~1+2+...+N across N
+        # firings (quadratic in the burst size) -- confirmed directly: a
+        # 25s/300-conn/s benchmark run produced ~405,000 embedded entries
+        # across ~900 correlated alerts, bloating alerts.json enough to
+        # OOM-kill the Flask process reading it back. Keeping only the most
+        # recent MAX_CONTRIBUTING_ALERTS bounds every single correlated
+        # alert's size regardless of burst length, without changing which
+        # alerts are used for the re-fire dedup above (that still sees the
+        # full `records`) -- only the evidence payload shown to a human
+        # reviewer is trimmed.
+        records = sorted(records, key=lambda r: r[0])[-MAX_CONTRIBUTING_ALERTS:]
         contributing = [
             {'threat_class': tc, 'event_ts': ts, 'confidence': al.get('confidence')}
             for ts, tc, al in records

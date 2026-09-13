@@ -1899,3 +1899,321 @@
   color: var(--text-tertiary);
   margin-top: 4px;
 }
+
+/* ===== Analytics / Model Performance shared grid ===== */
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.analytics-grid__span2 {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-chart__empty {
+  padding: var(--space-5) var(--space-3);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* ===== Network Flow Map ===== */
+
+.network-flow-map__label {
+  font-size: 10px;
+  fill: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.network-flow-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.network-flow-map__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.network-flow-map__legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ===== Model Performance status row ===== */
+
+.model-perf-status-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.model-perf-status-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.model-perf-status-card .active-detectors__status-dot {
+  margin-top: 5px;
+}
+
+.model-perf-status-card__name {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.model-perf-status-card__meta {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+/* ===== Correlation / Kill Chain ===== */
+
+.correlation-pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.correlation-pattern-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.correlation-pattern-card__label {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: var(--text-md);
+}
+
+.correlation-pattern-card__count {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.correlation-pattern-card__sequence {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: var(--space-3) 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.correlation-pattern-card__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.correlation-pattern-card__step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.correlation-pattern-card__arrow {
+  margin-left: 5px;
+  color: var(--text-tertiary);
+}
+
+.correlation-pattern-card__desc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-2);
+}
+
+.correlation-pattern-card__meta {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.correlation-incident-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.correlation-incident__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.correlation-incident__src {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.correlation-incident__confidence,
+.correlation-incident__time {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+.correlation-incident__sequence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border);
+}
+
+.correlation-incident__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.correlation-incident__step-class {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  min-width: 60px;
+}
+
+.correlation-incident__step-offset {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  min-width: 56px;
+}
+
+.correlation-incident__step-conf {
+  color: var(--text-secondary);
+}
+
+/* ===== Export & Reports ===== */
+
+.export-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.export-panel__option {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.export-panel__option-title {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+}
+
+.export-panel__option-desc {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+  margin: 0;
+  flex: 1;
+}
+
+.export-panel__status {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--accent);
+}
+
+.export-report {
+  margin-top: var(--space-4);
+}
+
+.export-report__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.export-report__section {
+  margin-top: var(--space-4);
+}
+
+.export-report__section-title {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2);
+}
+
+.export-report__list {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.8;
+}
+
+.export-report__table {
+  width: 100%;
+}
+
+.export-report__disclaimer {
+  margin-top: var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* ===== Print stylesheet (Export & Reports page) ===== */
+
+@media print {
+  .shell-topbar,
+  .sidebar,
+  .shell-footer,
+  .no-print {
+    display: none !important;
+  }
+
+  .shell-main {
+    padding: 0;
+  }
+
+  .export-report {
+    box-shadow: none;
+    border: none;
+  }
+}

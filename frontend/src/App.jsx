@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import OverviewPage from './pages/OverviewPage'
 import AlertsPage from './pages/AlertsPage'
+import AnalyticsPage from './pages/AnalyticsPage'
+import CorrelationPage from './pages/CorrelationPage'
 import ThreatAnalysisPage from './pages/ThreatAnalysisPage'
+import ModelPerformancePage from './pages/ModelPerformancePage'
+import ExportPage from './pages/ExportPage'
 import ArchitecturePage from './pages/ArchitecturePage'
 import './App.css'
 
@@ -151,8 +155,16 @@ function App() {
     switch (activePage) {
       case 'alerts':
         return <AlertsPage alerts={alerts} stats={stats} />
+      case 'analytics':
+        return <AnalyticsPage alerts={alerts} />
+      case 'correlation':
+        return <CorrelationPage alerts={alerts} />
       case 'threat-analysis':
         return <ThreatAnalysisPage stats={stats} alerts={alerts} />
+      case 'model-performance':
+        return <ModelPerformancePage />
+      case 'export':
+        return <ExportPage alerts={alerts} stats={stats} />
       case 'architecture':
         return <ArchitecturePage />
       case 'overview':

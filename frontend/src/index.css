@@ -24,10 +24,16 @@
   --status-warning: #f59e0b;
   --status-info: #60a5fa;
 
-  /* Alert severity — independent scale from threat class */
+  /* Alert severity — independent scale from threat class.
+     high/medium nudged 2026-09-13: scripts/validate_palette.js (dataviz
+     skill) found critical(#ef4444)/high(#f97316) fell below the normal-
+     vision distinguishability floor (ΔE 10.4, needs >=15) -- a real,
+     computable "can't tell these apart" bug, not a style opinion. See
+     ML_MODELS.md-adjacent frontend notes / commit message for the full
+     validator output. */
   --severity-critical: #ef4444;
-  --severity-high: #f97316;
-  --severity-medium: #fbbf24;
+  --severity-high: #ff8c00;
+  --severity-medium: #facc15;
   --severity-low: #38bdf8;
   --severity-unknown: #64748b;
 
@@ -36,14 +42,19 @@
   /* Threat classes — LOCKED exact values, identical in both themes.
      All six PS-required classes now run as real detectors (see
      backend/detectors/); multi-vector is the correlation engine's
-     synthetic MULTI_VECTOR alert, not a detector of its own. */
+     synthetic MULTI_VECTOR alert, not a detector of its own.
+     recon/multi-vector nudged 2026-09-13 for the same validator-confirmed
+     reason as severity above: ddos(#ef4444)/recon(#f97316) and
+     multi-vector(#dc2626)/exfil(#ec4899) -- the latter pair matters
+     because AlertsTimeline.jsx's own THREAT_ORDER places them adjacent --
+     both failed the normal-vision floor. */
   --threat-ddos: #ef4444;
-  --threat-recon: #f97316;
+  --threat-recon: #ff8c00;
   --threat-c2: #a855f7;
   --threat-dga: #06b6d4;
   --threat-tls: #6366f1;
   --threat-exfil: #ec4899;
-  --threat-multi-vector: #dc2626;
+  --threat-multi-vector: #991b1b;
   --threat-unknown: #64748b;
 
   /* Typography */
@@ -101,14 +112,21 @@
 
   --accent: #2563eb;
 
-  --status-live: #16a34a;
+  /* live/warning nudged 2026-09-13: validate_palette.js found
+     live(#16a34a)/offline(#dc2626) -- a red/green pair on the dashboard's
+     primary "is this thing working" indicator -- failed both the CVD
+     separation and normal-vision floor checks; warning/offline was
+     independently borderline-failing the same way. */
+  --status-live: #0d9488;
   --status-offline: #dc2626;
-  --status-warning: #d97706;
+  --status-warning: #ca8a04;
   --status-info: #2563eb;
 
-  --severity-critical: #dc2626;
-  --severity-high: #ea580c;
-  --severity-medium: #b45309;
+  /* critical/medium nudged 2026-09-13, same validator finding as the dark
+     theme's severity block above -- see that comment. */
+  --severity-critical: #b91c1c;
+  --severity-high: #f97316;
+  --severity-medium: #a16207;
   --severity-low: #0284c7;
   --severity-unknown: #7c8798;
 

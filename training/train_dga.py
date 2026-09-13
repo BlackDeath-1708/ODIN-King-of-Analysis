@@ -39,6 +39,15 @@ DGArchive dataset itself isn't available.
     space), SUPPOBOX (exactly 2 real English words concatenated, e.g.
     "sunshinevalley.com"), MATSNU (2-3 real English words, sometimes with
     a trailing digit).
+  REAL malware DGA output (label=1, added 2026-09-13): gen_real_umudga_dga()
+    adds 6,000 domains from UMUDGA (Zago et al. 2020, DOI
+    10.17632/y8ph45msv8.1, MIT licensed) -- the literal output of 12 real
+    malware families' own DGA code run in a controlled environment, not a
+    synthetic re-implementation of a published algorithm's shape like the
+    9 generators above. Requires running
+    `python scripts/download_umudga_dga.py` once first. See that script's
+    docstring for why Bambenek/Netlab 360's feeds were tried and rejected
+    (license-gated / dead cert, respectively) before landing on UMUDGA.
 
 Feature extraction reuses extract_features() from backend/detectors/dga.py
 directly, so train-time and serve-time feature computation are identical
@@ -163,6 +172,36 @@ def gen_real_domain_traffic(n: int) -> list:
     return out
 
 
+UMUDGA_REAL_PATH = REPO_ROOT / "training" / "dga_real_umudga.csv"
+
+
+def gen_real_umudga_dga(n: int) -> list:
+    """Real malware-DGA domains from UMUDGA (Zago et al. 2020, DOI
+    10.17632/y8ph45msv8.1, MIT licensed) -- see
+    scripts/download_umudga_dga.py's docstring for sourcing details and why
+    Bambenek/Netlab 360's feeds were tried and rejected first. Unlike every
+    other malicious-class generator in this file, these are the literal
+    output of real malware DGA code executed in a controlled environment,
+    not a synthetic re-implementation of a published algorithm's shape.
+    Requires running that download script once first; raises loudly rather
+    than silently training without this data if it hasn't been run, since
+    a silently-empty real-data arm would misrepresent what the model
+    actually saw."""
+    import csv
+    if not UMUDGA_REAL_PATH.exists():
+        raise FileNotFoundError(
+            f"{UMUDGA_REAL_PATH} not found -- run "
+            f"`python scripts/download_umudga_dga.py` first."
+        )
+    with open(UMUDGA_REAL_PATH, newline="") as f:
+        domains = [row["domain"] for row in csv.DictReader(f)]
+    if len(domains) < n:
+        raise ValueError(
+            f"UMUDGA real sample only has {len(domains)} domains, requested {n}."
+        )
+    return [(d, 1) for d in domains[:n]]
+
+
 def gen_conficker(n: int) -> list:
     tlds = ['com', 'net', 'org', 'info', 'biz', 'ws']
     out = []
@@ -279,6 +318,7 @@ def main():
         + gen_banjori(1000)
         + gen_suppobox(words, 2000)
         + gen_matsnu(words, 2000)
+        + gen_real_umudga_dga(6000)
     )
     random.shuffle(samples)
     print(f"Total samples: {len(samples)} "
@@ -320,12 +360,16 @@ def main():
         "dga", y_test, test_preds,
         n_train_rows=len(X_train), n_test_rows=len(X_test), grouping="query length bucket",
         notes=(
-            "Fully synthetic malicious class (9 published-DGA-algorithm-family generators: "
-            "Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/Ramnit/Banjori/Suppobox/Matsnu). "
+            "Malicious class: 9 synthetic published-DGA-algorithm-family generators "
+            "(Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/Ramnit/Banjori/Suppobox/Matsnu) "
+            "plus 6,000 REAL malware-DGA domains from UMUDGA (Zago et al. 2020, DOI "
+            "10.17632/y8ph45msv8.1, MIT licensed) -- the literal output of real malware DGA "
+            "code, not a re-implementation of a published algorithm's shape. See "
+            "scripts/download_umudga_dga.py and ML_MODELS.md for sourcing details. "
             "Benign class mixes single-dictionary-word hostnames with real, well-known domains "
             "plus realistic subdomain prefixes/depths (added 2026-09-11 after the bare-word-only "
             "generator false-positived on real ambient DNS traffic -- see ML_MODELS.md's "
-            "'DGA benign-distribution gap' section). No real malware DGA traffic used."
+            "'DGA benign-distribution gap' section)."
         ),
     )
 

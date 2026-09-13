@@ -1,0 +1,28 @@
+{
+  "scenario_id": "c2_benign_baseline",
+  "threat_class": "c2",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_c2.py",
+  "configuration": {
+    "gap_distribution": "expovariate (Poisson-like)",
+    "mean_gap_sec": [
+      3,
+      8
+    ],
+    "duration_sec": [
+      15,
+      30
+    ]
+  },
+  "expected_behavior": {
+    "cv": "high (~1.0)"
+  },
+  "repetitions": 65,
+  "applies_to_datasets": [
+    "training/dataset_c2.csv (via dataset_c2_original.csv)"
+  ],
+  "notes": "Exponential gaps required -- uniform random would falsely read as low-CV/beacon-like."
+}

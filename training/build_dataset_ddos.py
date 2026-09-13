@@ -53,6 +53,28 @@ SNAPSHOT_STEP = 0.14
 BOUNDARY_MARGIN = 0.5
 TARGET_IP = "127.0.0.1"   # filter by destination, not origin -- see module docstring
 
+# 2026-09-12 dataset-plan retrofit: every row now carries provenance/subtype
+# columns keyed to a manifest in training/scenarios/ddos/ -- see that
+# directory's README.md for the schema. All ddos scenarios are real
+# (hping3/TCP connect() capture), never synthetic.
+def _scenario_for(session_id: str) -> tuple[str, str | None]:
+    """(scenario_id, attack_subtype) for a session_id -- longer/more
+    specific prefixes checked first since e.g. "benign_" is a prefix of
+    "benign_udpspoof_"."""
+    if session_id.startswith("benign_udpspoof_"):
+        return "ddos_benign_udpspoof_baseline", None
+    if session_id.startswith("benign_http_"):
+        return "ddos_benign_http_baseline", None
+    if session_id.startswith("benign_"):
+        return "ddos_benign_baseline", None
+    if session_id.startswith("ddos_udpflood_"):
+        return "ddos_udp_flood", "udp_flood"
+    if session_id.startswith("ddos_spoofed_"):
+        return "ddos_spoofed_source", "spoofed_source"
+    if session_id.startswith("ddos_"):
+        return "ddos_syn_flood", "syn_flood"
+    raise ValueError(f"no scenario mapping for session_id={session_id!r}")
+
 
 def load_sessions(path):
     with open(path) as f:
@@ -130,7 +152,10 @@ def build():
             window_start = max(sess["start"], t - WINDOW_SECONDS)
             window = [e for e in sess_events if window_start <= e["ts"] <= t]
             if window:
-                row = {"session_id": sess["session_id"], "label": sess["class"], "ts": t}
+                scenario_id, attack_subtype = _scenario_for(sess["session_id"])
+                row = {"session_id": sess["session_id"], "label": sess["class"], "ts": t,
+                       "source": "real", "scenario_id": scenario_id,
+                       "attack_subtype": attack_subtype, "label_method": "generator_ground_truth"}
                 row.update(features_for_window(window))
                 rows.append(row)
             t += SNAPSHOT_STEP

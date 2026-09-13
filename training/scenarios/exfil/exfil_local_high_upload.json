@@ -1,0 +1,22 @@
+{
+  "scenario_id": "exfil_local_high_upload",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "bulk_exfil",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_exfil.py",
+  "configuration": {
+    "protocol": "HTTP POST",
+    "port": 8199,
+    "orig_bytes_min": 500000
+  },
+  "expected_behavior": {
+    "byte_ratio": "highly asymmetric outbound"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Real local capture, loopback."
+}

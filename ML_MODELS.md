@@ -639,14 +639,20 @@ section). Reworked in the same session as the DDoS/Recon/C2 real-traffic
 retraining above, closing as much of the "no real-capture cross-check" gap
 as ethically/practically possible:
 
-- **DGA**: still fully synthetic (no ethical way to run real malware DGA
-  code), but the generators now reproduce the publicly-documented
-  *algorithmic shape* of real DGA families (Conficker, Cryptolocker, Zeus
-  GameOver, Necurs, Tinba, Ramnit, Banjori, Suppobox, Matsnu) instead of one
-  generic random-string generator — see `training/train_dga.py`'s
-  docstring. This is what PS 26145's own suggested methodology ("DGA
-  samples from published algorithms, e.g. via DGArchive") looks like
-  without DGArchive's registration-gated dataset itself.
+- **DGA**: mostly synthetic, now with a real arm added 2026-09-13. The 9
+  original generators reproduce the publicly-documented *algorithmic shape*
+  of real DGA families (Conficker, Cryptolocker, Zeus GameOver, Necurs,
+  Tinba, Ramnit, Banjori, Suppobox, Matsnu) instead of one generic
+  random-string generator — see `training/train_dga.py`'s docstring. This
+  is what PS 26145's own suggested methodology ("DGA samples from published
+  algorithms, e.g. via DGArchive") looks like without DGArchive's
+  registration-gated dataset itself. **Added 2026-09-13**: 6,000 domains
+  that are the literal real output of 12 real malware families' own DGA
+  code — not a re-implementation of their shape — from UMUDGA (Zago et al.
+  2020, DOI 10.17632/y8ph45msv8.1, MIT licensed). Two gated/dead live-feed
+  alternatives (Bambenek Consulting, Netlab 360) were tried first and
+  rejected — see `scripts/download_umudga_dga.py`'s docstring and the "DGA
+  real-malware-data addition" section below.
 - **TLS flow-stats**: benign class is now REAL — actual HTTPS requests to
   ~142 diverse real domains, captured and joined via Zeek's `uid` (see the
   SSLByteEnricher bug/fix below). Malicious class stays synthetic (no
@@ -662,7 +668,7 @@ as ethically/practically possible:
 
 | Model | Training data | Rows | GroupKFold F1 | Held-out F1 |
 |---|---|---|---|---|
-| DGA (`dga_model.joblib`) | 6000 synthetic benign + 13,000 synthetic DGA across 9 published-algorithm families, grouped by length bucket | 19,000 | 0.987 (mean per-fold) | 0.99 |
+| DGA (`dga_model.joblib`) | 12,000 benign (6,000 synthetic + 6,000 real observed domains) + 19,000 DGA (13,000 synthetic across 9 published-algorithm families + 6,000 REAL from UMUDGA), grouped by length bucket | 31,000 | 0.9618 (mean per-fold) | 0.9952 |
 | TLS flow-stats (`tls_flow_model.joblib`) | 9,530 REAL benign (real HTTPS to 142 domains) + 9,530 synthetic malicious, grouped by domain | 19,060 | 0.9996 | 1.00 |
 | Exfil (`exfil_model.joblib`) | 7,001 REAL rows (5,600 benign + 1,401 exfil-shaped: high-upload/ICMP/DNS) + 8,500 synthetic top-up, grouped uniquely per row | 15,501 | 1.000 | 1.00 |
 
@@ -672,6 +678,92 @@ real-algorithm-shaped families (some, like BANJORI's low-mutation pattern,
 genuinely closer to benign dictionary words on several features), the
 classifier has to do real work — a lower, more honest number here is a
 *better* sign than the old perfect one, not a regression.
+
+## DGA real-malware-data addition (2026-09-13)
+
+Closes the "DGA remains fully synthetic" gap flagged in this project's own
+honest-limitations sections, for a bounded subset. `scripts/download_umudga_dga.py`
+pulls 6,000 domains (12 folders x 500) from **UMUDGA** (Zago, Gil Pérez &
+Martínez Pérez, "UMUDGA: a dataset for profiling DGA-based botnet,"
+*Computers & Security*, 2020, DOI 10.1016/j.cose.2020.101719; dataset DOI
+10.17632/y8ph45msv8.1, **MIT licensed**) — over 30M domains produced by
+*actually executing* 50 real malware families' own DGA code in a
+controlled environment. These are the literal real output of real malware,
+not this project's other 9 generators' re-implementation of a published
+algorithm's *shape*.
+
+**Two other sources were tried first and rejected, documented rather than
+silently swapped:**
+- **Bambenek Consulting's feed** (`osint.bambenekconsulting.com`) returns
+  HTTP 403 with a message requiring a manually-issued license even for
+  research/non-profit use — not a plug-and-fetch download despite being
+  nominally "free."
+- **Netlab 360's feed** (`data.netlab.360.com`) has a TLS certificate that
+  expired December 2023; the host is unreachable from this environment
+  (connection timeout, verified directly with both `curl` and `openssl
+  s_client`).
+
+**Sourcing mechanics**: UMUDGA's own public file-listing API
+(`data.mendeley.com/api/datasets/y8ph45msv8/files`) returns direct
+per-file download URLs with no authentication required — confirmed by
+actually downloading and inspecting content, not just reading
+documentation. One real friction point found and fixed: the API's default
+`urllib` user-agent got a `403` from Mendeley's edge (Cloudflare bot
+filtering), not an auth wall — a browser-style `User-Agent` header clears
+it, verified by retrying the identical request with only that header
+added. 12 of the 37 eligible folders were picked by evenly spacing across
+the *sorted* folder-ID listing (not just the first 12), so the sample
+isn't biased toward upload order.
+
+**A real limitation, documented rather than hidden**: UMUDGA's file-listing
+API exposes only opaque per-family folder UUIDs — it does not expose the
+official malware family name per folder, and the project's own GitHub wiki
+(checked directly) only documents feature-distribution statistics, not a
+folder-to-family key. Rather than guess or silently assert a family name
+that isn't confirmed, each row carries its real source folder ID and a
+purely descriptive `shape_hint` (e.g. `random_alnum_fixed_len`,
+`dict_concat_hyphenated`, `hex_hash_style`) inferred by eye from sample
+content — never presented as the authoritative family identity. The
+dataset's own DOI/paper is the authoritative source for the official
+50-family roster.
+
+**Verified, not just downloaded**: visual inspection of the 12 sampled
+folders before committing to them confirmed genuine cross-family
+diversity — fixed- and variable-length random-alphanumeric shapes, a
+32-char hex/hash-style shape, and two distinct dictionary-word-concatenation
+shapes (e.g. `wedding-muscle.com`, `migrationispeopleofof.biz`) that are
+exactly the kind of low-entropy, Suppobox-like pattern this detector's
+`word_boundary_score` feature exists to catch. Retraining with this data
+blended in (replacing nothing — additive to the existing 9 synthetic
+generators) held the held-out test F1 at 0.9952 (previously 0.99) with no
+regression on either of this project's own prior DGA fixes: the real
+ambient-DNS false-positive domains (`time.cloudflare.com`,
+`api.globalping.io`, `main.vscode-cdn.net`) and the held-out generalization
+domains (`cdn.discordapp.com`, `api.stripe.com`) all still clear at <0.2%
+confidence, and known-malicious shapes (`xjkqmzpwl.ru`,
+`sunshinevalleycloud.com`) still fire at 100%. A genuine generalization
+check — 5 real UMUDGA domains deliberately excluded from the 6,000-row
+training sample (every 200th line skips these) — all scored 100% DGA
+confidence, confirming the model learned the family's real pattern rather
+than memorizing the specific rows it was shown.
+
+Mean GroupKFold F1 dropped from 0.987 to 0.9618 (one fold as low as
+0.8539) — read the same way the 2026-09-11 rework's F1 drop was read: a
+harder, more behaviorally diverse dataset giving the classifier more real
+work to do is a more honest number, not a regression. Held-out test F1 (a
+single fixed split, not cross-validated) stayed essentially flat at
+0.9952, since the real UMUDGA rows' *aggregate* separability from benign
+is still clean — the added variance shows up specifically in GroupKFold's
+per-length-bucket folds, consistent with different UMUDGA families
+occupying different narrow length ranges that a single fold can land
+entirely on one side of.
+
+**What this does NOT claim**: 6,000 domains across 12 of UMUDGA's 50
+families is a bounded sample, not exhaustive coverage of the dataset or of
+real-world DGA diversity — the other 25 eligible folders and the full
+~900MB/30M-domain corpus remain available for a future expansion if this
+needs to scale further. Family identity is a descriptive hint, not a
+confirmed label (see above).
 
 **TLS/exfil's near-perfect F1 is more legitimate than it looks**: unlike
 the old fully-synthetic datasets (whose separability was a generator
@@ -1085,15 +1177,49 @@ byte-field bugs found the same way in earlier passes).
 
 ## Closing the last two gaps: JA4 feed re-check, and dnscat2 (2026-09-13)
 
-**JA4 threat-intel feed -- re-checked, genuinely still doesn't exist.**
-Went beyond the original "sslbl.abuse.ch doesn't publish one" check:
-FoxIO (JA4's creator) runs `ja4db.foxio.io`, but its own JS bundle shows
-the real database sits behind `/api/auth/signup-requests` and
+**JA4 threat-intel feed -- re-checked, genuinely still doesn't exist as a
+live download.** Went beyond the original "sslbl.abuse.ch doesn't publish
+one" check: FoxIO (JA4's creator) runs `ja4db.foxio.io`, but its own JS
+bundle shows the real database sits behind `/api/auth/signup-requests` and
 `/api/auth/token` -- a gated community database, not a public download.
 `foxio.io/intel-list` (referenced from the same bundle) redirects to
-`/404`. No public, freely-downloadable JA4 malicious-fingerprint feed
-exists as of this check -- the empty `ja4_blacklist.json` stays an
-honest placeholder, not a shortcut that was never actually attempted.
+`/404`. No public, freely-downloadable JA4 malicious-fingerprint *feed*
+exists as of this check.
+
+**Later closed a different way (2026-09-13, second pass): computed real
+JA4 hashes ourselves, from real malware pcaps, instead of waiting for a
+feed.** JA4 (unlike JA3's closed sslbl feed) is an open, published
+algorithm -- FoxIO ships an official reference tool
+(`FoxIO-LLC/ja4`, `python/ja4.py`) to compute it from any pcap. Used
+**once, offline, non-commercially** (per that tool's own FoxIO License
+1.1, which permits exactly this: academic/internal research use) against
+the same malware pcaps pulled for the TLS real-data addition below --
+never vendored into this repo, and never called at runtime, same
+one-way-compliant "run once, cache the output" pattern as
+`scripts/download_ja3_blacklist.py`. One real bug in FoxIO's own tool was
+hit and worked around locally (a `KeyError` on certain streams in its
+`display()` function crashed the whole run before reaching later packets
+in the pcap -- patched to skip gracefully in the local throwaway copy,
+never upstreamed or committed).
+
+Yielded **5 real, ground-truth-confirmed JA4 hashes** now populating
+`backend/data/ja4_blacklist.json`:
+- `t12d190800_d83cc789557e_7af1ed941c26` -- Latrodectus/Lumma Stealer's own
+  C2 client, identical across all 3 of its confirmed C2 domains
+  (aytobusesre.com, popfealt.one, auctiondecadecontaii.shop) -- a strong,
+  malware-specific signature, not a coincidence.
+- Two session-ticket variants of the same delivery-stage client
+  (`horaot.org`, the fake-Azure redirect page).
+- Two hashes from CTU-13's Neris (2011 botnet), extracted by joining
+  ja4.py's output against the same ground-truth Botnet 5-tuples
+  `build_dataset_tls_seq.py` already uses -- a `t10i...` prefix (TLS 1.0),
+  consistent with a 14-year-old capture.
+
+JA3 alone already satisfied PS 26145 (d)'s "JA3/JA3S or JA4" wording
+regardless -- this closes the "ships empty" gap for real, not just on
+paper. Verified end-to-end: feeding one of these hashes through
+`TLSMalwareDetector.process()` directly fires a HIGH-severity alert with
+`detection_method: ja4_blacklist` and the correct family attribution.
 
 **dnscat2 (real tool, built from source in a throwaway container --
 iodine's approach, no host root needed):** cloned `iagox86/dnscat2`,
@@ -1214,6 +1340,75 @@ top of the frozen trained net, saved to
 the alert -- verified directly: the `calibrated` field on a Tier-2-driven
 alert now reads `True` only because the calibration file loaded, not
 because Tier 1 happened to be calibrated.
+
+## TLS real-malicious-data addition (2026-09-13)
+
+Closes the "Zero real-malicious coverage feeds the flow-stats model" gap
+flagged in `training/scenarios/README.md`'s own known-gaps list. Sourced
+from **malware-traffic-analysis.net**, a well-known, write-up-annotated
+real-malware-pcap repository (each post ships an analyst-confirmed IOC
+file naming the exact C2/malicious-infra domains -- ground truth from a
+human analyst, not inferred from traffic shape).
+
+**Three 2024 samples were pulled and checked via their own IOC files
+before committing to any of them** -- a real, useful negative finding:
+- **SSLoad → Cobalt Strike** and **DarkGate**: both confirmed malware
+  families, but in *these specific captures* their actual C2 runs over
+  plain HTTP (port 80/8094), not TLS -- checking the write-up's own
+  "INFECTION TRAFFIC"/"C2 TRAFFIC" sections directly showed this; a family
+  name alone ("Cobalt Strike is TLS C2!") is not a substitute for checking
+  the actual sample. Contribute nothing to this dataset.
+- **Latrodectus → Lumma Stealer** (2024-03-07): confirmed real HTTPS C2 --
+  the post's own traffic log shows real repeated ClientHellos to
+  `aytobusesre.com`/`popfealt.one` roughly 10-30 minutes apart (genuine
+  beacon timing) and to `auctiondecadecontaii.shop` (Lumma Stealer's own
+  exfil channel). Used.
+
+Processed through the exact same offline-Zeek pipeline the live demo's
+replay feature and the existing Neris CTU-13 addition already use
+(`training/build_malicious_pcap_logs.py`, a disposable `docker run`, never
+touching the live `zeek_monitor` container). Yielded **22 real flows**
+across 4 confirmed-malicious domains. Two domains seen in the same pcap
+were deliberately **excluded**: `firebasestorage.googleapis.com` is
+legitimate Google infrastructure abused for hosting (blacklisting it would
+mislabel a real Google service, not malware), and `lufyfeo.org` (the
+initial email-link redirect) isn't named under the IOC file's own
+C2/malicious-infra sections.
+
+**Flow-stats RF model (Tier 1, `train_tls_flow.py`) -- shipped
+successfully.** These 22 rows brought the malicious class from 100%
+synthetic to real+synthetic; held-out F1 stayed at 0.999 (FPR rose
+slightly to 0.057 on this small 20-domain-group test split, worth watching
+as more real domains are added, not alarming at n=20). See
+`training/scenarios/tls/tls_malicious_real_latrodectus_lumma_2024.json`
+for the full domain list and exclusions.
+
+**Tier-2 seq-CNN (`train_tier2.py`) -- attempted, found a regression,
+reverted rather than shipped.** Adding the same 22 rows to
+`dataset_tls_seq.npz` (35 real-malicious rows total, up from 13) and
+retraining produced a model that, after its own Platt calibration, still
+scored 2 of 5 spot-checked **real benign** flows at 0.82/0.9997
+"malicious" -- verified directly against
+`backend/detectors/tier2_model.py`'s actual serve-time `predict()` path,
+not just the training script's own summary metrics. The pooled GroupKFold
+confusion matrix was `[[0 correct, 202 wrong], ...]` for benign rows,
+reproduced identically on a second training run (not an unlucky
+initialization). Most likely cause: this dataset's real-benign count (202
+rows) is tiny relative to a neural net's capacity, and the new
+real-malicious rows pulled the decision boundary somewhere that overlaps
+more with real benign traffic than Neris's rows did. **The regressed
+model/calibration/metrics files were reverted to their last-committed
+version** -- the shipped tier2 model is unchanged from before this
+session. The extraction code itself
+(`build_dataset_tls_seq.py:build_real_malicious_rows_by_domain()`) is
+correct and kept (it matches exactly the 22 expected flows), documented
+with a prominent warning so a future run doesn't silently reproduce the
+same instability. See that function's docstring for the full note.
+**Takeaway for anyone extending this**: a successful data addition to one
+model (RF) doesn't automatically transfer to a second, architecturally
+different model (a small neural net) trained on the same underlying
+flows -- each needs its own verification against real held-out examples,
+not just a headline F1 number.
 
 ## Real E2E throughput benchmark, and a real correlator bug it found (2026-09-12)
 

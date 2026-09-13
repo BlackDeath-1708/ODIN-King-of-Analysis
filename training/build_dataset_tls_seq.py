@@ -10,9 +10,31 @@ does not modify it.
     `provenance` column rather than one replacing the other:
       "real" -- from training/zeek-logs-tls-malicious/<scenario>/, produced
         by training/build_malicious_pcap_logs.py from a real malware pcap
-        (currently CTU-13 scenario botnet42/Neris -- see SCENARIO_LABELS
-        below), filtered down to only the 5-tuples that scenario's own
-        ground-truth argus labels call "Botnet" (not Normal/Background).
+        (CTU-13 scenario botnet42/Neris via SCENARIO_LABELS, plus a 2024
+        Latrodectus/Lumma pcap via build_real_malicious_rows_by_domain()),
+        filtered down to only rows with confirmed-malicious ground truth
+        (argus Botnet label, or an analyst-confirmed C2 domain).
+
+  KNOWN INSTABILITY (2026-09-13, found and NOT shipped): adding the
+  Latrodectus rows here (35 real-malicious rows total, up from 13) and
+  retraining train_tier2.py produced a model that, after its own Platt
+  calibration, still scored 2 of 5 spot-checked REAL BENIGN flows at
+  0.82/0.9997 "malicious" -- verified directly against
+  backend/detectors/tier2_model.py's actual serve-time predict() path, not
+  just the training script's own reported metrics. The pooled GroupKFold
+  confusion matrix from that run was [[0 benign-correct, 202
+  benign-wrong], ...] -- reproduced twice, not a one-off unlucky
+  initialization. Root cause is very likely this dataset's tiny real-benign
+  count (202 rows) relative to a neural net's capacity, made worse by the
+  new real-malicious rows pulling the decision boundary somewhere that
+  overlaps more with real benign traffic than Neris's rows did. The
+  regressed model/calibration/metrics were reverted to their prior
+  committed versions; this file's extraction code is correct and kept
+  (verified: it matches exactly the 22 analyst-confirmed flows expected),
+  but running this script and then train_tier2.py again will reproduce the
+  same unstable result until train_tier2.py's architecture/regularization
+  is revisited for this data volume. See ML_MODELS.md's "TLS
+  real-malicious-data addition" section.
       "synthetic" -- the existing beacon/bulk-upload generator, imported
         from build_dataset_tls.py rather than duplicated.
   This split is the built-in sanity check train_tier2.py uses: a model that
@@ -37,7 +59,9 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from detectors.tier2_features import pack_sequence  # noqa: E402
 
-from build_dataset_tls import _synth_beacon_pktseq, _synth_bulk_pktseq  # noqa: E402
+from build_dataset_tls import (  # noqa: E402
+    _synth_beacon_pktseq, _synth_bulk_pktseq, REAL_MALICIOUS_SCENARIOS,
+)
 
 BENIGN_LOG_DIR = REPO_ROOT / "training" / "zeek-logs-tls"
 MALICIOUS_ROOT = REPO_ROOT / "training" / "zeek-logs-tls-malicious"
@@ -139,6 +163,38 @@ def build_real_malicious_rows() -> list:
     return rows
 
 
+def build_real_malicious_rows_by_domain() -> list:
+    """Sibling to build_real_malicious_rows() above, for scenarios with no
+    argus/binetflow ground truth (malware-traffic-analysis.net pcaps) --
+    ground truth here is the analyst-confirmed C2/malicious-infra domain
+    list in REAL_MALICIOUS_SCENARIOS (build_dataset_tls.py), matched
+    against ssl.log's server_name instead of a 5-tuple. See that dict's
+    own comment for exactly which domains were confirmed vs. deliberately
+    excluded."""
+    rows = []
+    for scenario, cfg in REAL_MALICIOUS_SCENARIOS.items():
+        scenario_dir = MALICIOUS_ROOT / scenario
+        conn_by_uid = _load_jsonl_by_uid(scenario_dir / "conn.log")
+        pktseq_by_uid = _load_jsonl_by_uid(scenario_dir / "pkt_seq.log")
+        matched = 0
+        for uid, ssl_d in _load_jsonl_by_uid(scenario_dir / "ssl.log").items():
+            if ssl_d.get("server_name") not in cfg["confirmed_malicious_domains"]:
+                continue
+            if conn_by_uid.get(uid) is None:
+                continue
+            pktseq = pktseq_by_uid.get(uid)
+            if pktseq is None:
+                continue
+            seq, mask = pack_sequence(pktseq.get("sizes", []), pktseq.get("gaps", []))
+            if not mask.any():
+                continue
+            rows.append({"seq": seq, "mask": mask, "label": 1, "provenance": "real", "group": scenario})
+            matched += 1
+        print(f"[{scenario}] real malicious TLS flows matched to analyst-confirmed domains "
+              f"(seq-CNN dataset): {matched}")
+    return rows
+
+
 def build_synthetic_malicious_rows(n: int) -> list:
     rows = []
     for i in range(n // 2):
@@ -154,7 +210,7 @@ def build_synthetic_malicious_rows(n: int) -> list:
 
 def build() -> None:
     benign = build_benign_rows()
-    real_malicious = build_real_malicious_rows()
+    real_malicious = build_real_malicious_rows() + build_real_malicious_rows_by_domain()
     synthetic_malicious = build_synthetic_malicious_rows(max(len(benign) - len(real_malicious), random_synth_n))
     all_rows = benign + real_malicious + synthetic_malicious
 

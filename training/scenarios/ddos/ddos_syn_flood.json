@@ -1,0 +1,30 @@
+{
+  "scenario_id": "ddos_syn_flood",
+  "threat_class": "ddos",
+  "is_malicious": true,
+  "attack_subtype": "syn_flood",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_ddos.py",
+  "configuration": {
+    "tool": "hping3 -S",
+    "target_rate_conn_per_sec": [
+      10,
+      300
+    ],
+    "burst_duration_sec": [
+      8,
+      20
+    ],
+    "dst_port": "single fixed port per session"
+  },
+  "expected_behavior": {
+    "packet_rate": "high",
+    "dst_port_entropy": "near zero (single port)"
+  },
+  "repetitions": 65,
+  "applies_to_datasets": [
+    "training/dataset_ddos.csv"
+  ],
+  "notes": "Real hping3 SYN packets, never --flood; -i u<micros> + -c <count> bounds rate."
+}

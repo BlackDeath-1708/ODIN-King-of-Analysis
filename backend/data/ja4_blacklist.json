@@ -1,1 +1,22 @@
-{}
+{
+  "t12d190800_d83cc789557e_7af1ed941c26": {
+    "family": "Latrodectus/Lumma Stealer (2024 C2 client)",
+    "severity": "high"
+  },
+  "t13d1517h2_8daaf6152771_b1ff8ab2d16f": {
+    "family": "Latrodectus (2024 fake-Azure delivery stage, session-ticket variant A)",
+    "severity": "high"
+  },
+  "t13d1516h2_8daaf6152771_02713d6af862": {
+    "family": "Latrodectus (2024 fake-Azure delivery stage, session-ticket variant B)",
+    "severity": "high"
+  },
+  "t10i460300_234845559c90_a875e5012fde": {
+    "family": "Neris (CTU-13 Scenario 42, 2011 botnet)",
+    "severity": "high"
+  },
+  "t10i290100_cdba58456bdf_e78b541c01a9": {
+    "family": "Neris (CTU-13 Scenario 42, 2011 botnet)",
+    "severity": "high"
+  }
+}

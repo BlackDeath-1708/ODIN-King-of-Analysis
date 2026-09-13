@@ -1,0 +1,22 @@
+{
+  "scenario_id": "tls_benign_real_https",
+  "threat_class": "tls",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_tls.py",
+  "configuration": {
+    "protocol": "ssl",
+    "distinct_real_domains": "~126"
+  },
+  "expected_behavior": {
+    "pkt_size_sequence": "varied (real human/browser traffic)"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_tls.csv",
+    "training/dataset_tls_seq.npz"
+  ],
+  "notes": "Real HTTPS requests to diverse real domains."
+}

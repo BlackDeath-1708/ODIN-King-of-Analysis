@@ -1,0 +1,24 @@
+{
+  "scenario_id": "exfil_synthetic_dns",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "dns_tunnel_exfil",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/build_dataset_exfil.py",
+  "configuration": {
+    "orig_bytes_range": [
+      6000,
+      200000
+    ],
+    "dst_port": 53
+  },
+  "expected_behavior": {
+    "to_dns": true
+  },
+  "repetitions": 1000,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Synthetic top-up for class volume."
+}

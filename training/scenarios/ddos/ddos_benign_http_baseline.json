@@ -1,0 +1,21 @@
+{
+  "scenario_id": "ddos_benign_http_baseline",
+  "threat_class": "ddos",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_shared_benign_http.py",
+  "configuration": {
+    "tool": "real HTTP GET/POST via curl against a local server",
+    "port": 8300,
+    "duration_sec": [15, 25],
+    "mix": "70% GET, 30% POST (100-2000 byte bodies)"
+  },
+  "expected_behavior": {
+    "packet_rate": "low-moderate, HTTP-request-shaped rather than bare connect() bursts"
+  },
+  "repetitions": 15,
+  "applies_to_datasets": ["training/dataset_ddos.csv"],
+  "notes": "Dataset-plan Step 4 (diversify benign sources) -- ddos/recon/c2 previously shared one single benign shape (plain TCP connect() bursts). Added a second, real, shared benign shape via one script so all three could reuse it. Recon and C2 deliberately did NOT get this addition in the same round: a container restart between the main recapture and this capture truncated the shared training/zeek-logs/conn.log, breaking dataset_ddos.csv (0 ddos rows) until re-captured; redoing recon's/c2's own multi-hour captures a second time just to add this one shape was judged not worth the risk, so only ddos carries it for now. See docs/DATASET_STRUCTURE.md and ML_MODELS.md for the full incident note."
+}

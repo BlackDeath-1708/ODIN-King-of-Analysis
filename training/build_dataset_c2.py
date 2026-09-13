@@ -49,6 +49,16 @@ SRC_IP = "127.0.0.1"
 BENIGN_PORT_POOL = range(8080, 8130)
 C2_PORT_POOL = range(19110, 19140)
 
+# 2026-09-12 dataset-plan retrofit: see training/scenarios/c2/README.md.
+def _scenario_for(session_id: str) -> tuple[str, str | None]:
+    if session_id.startswith("benign_http_"):
+        return "c2_benign_http_baseline", None
+    if session_id.startswith("benign_"):
+        return "c2_benign_baseline", None
+    if session_id.startswith("c2_"):
+        return "c2_periodic_beacon", "periodic_beacon"
+    raise ValueError(f"no scenario mapping for session_id={session_id!r}")
+
 
 def load_sessions(path):
     with open(path) as f:
@@ -136,7 +146,10 @@ def build():
             history = [e for e in sess_events if e <= t][-MAX_OBSERVATIONS:]
             stats = stats_for(history)
             if stats:
-                row = {"session_id": sess["session_id"], "label": sess["class"], "ts": t}
+                scenario_id, attack_subtype = _scenario_for(sess["session_id"])
+                row = {"session_id": sess["session_id"], "label": sess["class"], "ts": t,
+                       "source": "real", "scenario_id": scenario_id,
+                       "attack_subtype": attack_subtype, "label_method": "generator_ground_truth"}
                 row.update(stats)
                 rows.append(row)
             t += SNAPSHOT_STEP

@@ -26,7 +26,7 @@ that must be detected from that passive vantage point alone:
 |---|---|---|---|---|
 | a | Volumetric / protocol DDoS | Flow-level rate + source-IP entropy | `ddos.py` | Real pcaps |
 | b | Botnet C2 beaconing | Periodicity / inter-arrival analysis | `c2.py` | Real pcaps |
-| c | DGA domains / DNS tunnelling | Entropy / n-gram analysis of DNS names | `dga.py` | Synthetic |
+| c | DGA domains / DNS tunnelling | Entropy / n-gram analysis of DNS names | `dga.py` | Synthetic + real (UMUDGA) |
 | d | Malware in encrypted sessions | JA3/JA4 TLS fingerprints, no decryption | `tls_malware.py` | Synthetic |
 | e | Reconnaissance / port scanning | Fan-out patterns from one source | `recon.py` | Real pcaps |
 | f | Data exfiltration | Byte-ratio / flow-volume asymmetry | `exfil.py` | Synthetic |
@@ -38,10 +38,14 @@ training-data provenance: DDoS/C2/recon are trained and cross-validated in
 this repo (`training/`) against real captured traffic (16,000+ rows each,
 generated with PS-named tooling — real rate-limited `hping3` SYN floods,
 real `nmap` scans, a self-built C2 beacon emulator — see `ML_MODELS.md`'s
-"Real-traffic retraining"); DGA/TLS/exfil are trained on synthetic data
-generated in this repo, because no equivalent real-capture validation set
-exists yet for those three classes. Nothing here claims coverage or
-validation it doesn't have — see `ML_MODELS.md` for the full, honest
+"Real-traffic retraining"); TLS/exfil are trained on synthetic data
+generated in this repo for their malicious class, because no equivalent
+real-capture validation set exists yet for those classes; DGA was the same
+until 2026-09-13, when 6,000 real malware-DGA domains (UMUDGA, MIT
+licensed) were added alongside its 9 synthetic generators — see
+`ML_MODELS.md`'s "DGA real-malware-data addition" section. Nothing here
+claims coverage or validation it doesn't have — see `ML_MODELS.md` for the
+full, honest
 per-model numbers, and the Architecture page's Threat Coverage matrix for
 the same breakdown live in the dashboard.
 
@@ -135,13 +139,14 @@ Apache Flink job later without changing a single line of detection logic.
 | DDoS (SYN/UDP/spoofed) | RandomForest on flow-rate + port/src-IP entropy | `ddos_model_calibrated.joblib` | 1.000 | Yes |
 | Reconnaissance | RandomForest on fan-out (unique ports/hosts) features | `recon_model_v3_calibrated.joblib` | 1.000 | Yes |
 | C2 Beaconing | RandomForest on inter-arrival timing, range-gated | `c2_model_calibrated.joblib` | 0.9994 | Yes |
-| DGA / DNS Tunnelling | RandomForest (entropy/n-gram/word-boundary) + rule-based tunnel path | `dga_model_calibrated.joblib` | 0.99† | Yes |
+| DGA / DNS Tunnelling | RandomForest (entropy/n-gram/word-boundary) + rule-based tunnel path | `dga_model_calibrated.joblib` | 0.9952† | Yes |
 | TLS Malware (JA3) | JA3 blacklist lookup + RandomForest on flow stats | `tls_flow_model_calibrated.joblib` | 1.00‡ | Yes |
 | Data Exfiltration | Rule-based pattern pre-filter + RandomForest on flow-volume | `exfil_model_calibrated.joblib` | 1.00‡ | Yes |
 
-† DGA is synthetic but now reproduces 9 published DGA algorithm families'
+† DGA's 9 synthetic generators reproduce published DGA algorithm families'
 real characteristic shapes (Conficker, Cryptolocker, Suppobox, etc.) rather
-than one generic generator — see `ML_MODELS.md`.
+than one generic generator, now blended with 6,000 REAL malware-DGA domains
+(UMUDGA, MIT licensed, added 2026-09-13) — see `ML_MODELS.md`.
 ‡ TLS/exfil now train on majority-REAL captured traffic (real HTTPS
 requests, real asymmetric transfers/ICMP/DNS) mixed with a synthetic
 top-up for the class with no ethical real-malware source — see
@@ -229,29 +234,44 @@ below.
   a **word-boundary score** — the fraction of a domain decomposable into
   known English words, which separates dictionary-style DGA families
   (e.g. Suppobox) from purely random ones. See §5.
-- **Trained on synthetic data reproducing 9 published DGA algorithm
-  families** (Conficker, Cryptolocker, Zeus GameOver, Necurs, Tinba,
-  Ramnit, Banjori, Suppobox, Matsnu) — 19,000 rows, F1 0.99. See
-  `ML_MODELS.md` for why this is a meaningfully closer match to PS 26145's
-  "DGA samples from published algorithms" methodology than a single
-  generic random-string generator.
+- **Trained on data reproducing 9 published DGA algorithm families**
+  (Conficker, Cryptolocker, Zeus GameOver, Necurs, Tinba, Ramnit, Banjori,
+  Suppobox, Matsnu) **plus 6,000 REAL malware-DGA domains added
+  2026-09-13** from UMUDGA (MIT licensed, DOI 10.17632/y8ph45msv8.1) — the
+  literal output of 12 real malware families' own DGA code, not a
+  re-implementation of their shape. 31,000 rows total, held-out F1 0.9952.
+  See `ML_MODELS.md`'s "DGA real-malware-data addition" section for the
+  sourcing story (including two gated/dead feed alternatives tried first)
+  and why this is a meaningfully closer match to PS 26145's "DGA samples
+  from published algorithms" methodology than a single generic
+  random-string generator.
 
 ### TLS/QUIC Malware (`backend/detectors/tls_malware.py`)
 - **Path A:** JA3 fingerprint lookup against an offline blacklist (97 real
   entries downloaded from sslbl.abuse.ch — the download itself is a one-off
   script, never called at runtime, keeping the one-way constraint intact).
-- **Path A2 (added 2026-09-12):** JA4 blacklist lookup, same shape as Path
-  A. Ships empty — no public JA4 threat-intel feed exists yet (checked
-  directly against sslbl.abuse.ch); the path is wired up and ready for the
-  moment one does. PS 26145 (d)'s "JA3/JA3S or JA4" wording is satisfied by
-  the real, working JA3 path regardless.
+- **Path A2 (added 2026-09-12, populated 2026-09-13):** JA4 blacklist
+  lookup, same shape as Path A. No public JA4 *feed* exists (checked
+  directly against sslbl.abuse.ch and FoxIO's own gated `ja4db.foxio.io`),
+  but JA4 is an open algorithm — 5 real hashes were computed directly from
+  real malware pcaps (Latrodectus/Lumma Stealer 2024, CTU-13 Neris) using
+  FoxIO's official reference tool, used once offline per its own
+  non-commercial license, never vendored into this repo. See
+  `ML_MODELS.md`'s "Closing the last two gaps" section. PS 26145 (d)'s
+  "JA3/JA3S or JA4" wording was already satisfied by the JA3 path alone
+  regardless.
 - **Path B:** RandomForest on flow statistics (byte counts, duration, byte
   ratio, and — added 2026-09-13 — packet-size/timing-sequence summary
   stats plus a protocol indicator, 12 features total) for malware
-  families not in the blacklist. **Trained on 23,777 rows: 5,777 REAL
-  benign flows (5,405 real HTTPS + 372 real QUIC sessions, 157 distinct
-  real domains) + 18,000 synthetic malicious flows**, pooled GroupKFold F1
-  0.9998.
+  families not in the blacklist. **Trained on 18,231 rows: 209 REAL benign
+  flows (194 real HTTPS + 15 real QUIC sessions) + 22 REAL malicious flows
+  (added 2026-09-13, see below) + 18,000 synthetic malicious flows**, F1
+  0.999. Note: the real-benign count has dropped from a previously
+  documented ~5,777 because `training/zeek-logs-tls/` (the underlying
+  capture log directory) currently holds fewer rows than that — a
+  pre-existing staleness in that capture, not something changed by this
+  session's work; re-running `training/capture/capture_tls.py`/
+  `capture_quic.py` would restore more real benign coverage.
 - **Packet-size and timing sequences (PS 26145 (d), added 2026-09-13):**
   `zeek/scripts/pkt_seq.zeek` logs the first ~12 packet sizes and
   inter-arrival gaps per SSL/QUIC connection; summarized as mean/std
@@ -655,13 +675,15 @@ larger real-traffic retraining run entirely inside `training/` — see
 
 ## 13. Honest limitations
 
-- **Only DGA remains fully synthetic.** TLS malware and data exfiltration
-  now train on majority-real captured traffic (see §4); DGA has no ethical
-  real-malware-DGA source, but its generators now reproduce 9 published DGA
-  algorithm families' real characteristic shapes rather than one generic
-  generator. Malicious-class data for TLS/exfil is still synthetic (no
-  ethical real-malware-traffic source exists for either) — see
-  `ML_MODELS.md`.
+- **DGA is now majority-synthetic, not fully synthetic.** TLS malware and
+  data exfiltration train on majority-real captured traffic (see §4); DGA
+  has no ethical way to *run* real malware DGA code itself, but as of
+  2026-09-13 it trains on 6,000 REAL domains (UMUDGA, MIT licensed) that
+  are the literal output of 12 real malware families' own DGA code,
+  alongside the 9 generators that reproduce published DGA algorithm
+  families' shapes rather than one generic generator. Malicious-class data
+  for TLS/exfil is still synthetic (no ethical real-malware-traffic source
+  exists for either) — see `ML_MODELS.md`.
 - **DGA's benign class was found to false-positive on real ambient DNS
   traffic** (this machine's own background queries, not synthetic —
   498/500 alerts in one live session) because the original synthetic
@@ -729,13 +751,16 @@ larger real-traffic retraining run entirely inside `training/` — see
   — see `ML_MODELS.md`). A from-scratch DGArchive pull remains untested
   against this specific build (the in-repo DGA generators reproduce 9
   published algorithm families' characteristic shapes instead).
-- **No public JA4 threat-intel feed exists to populate
-  `ja4_blacklist.json`** — checked directly against both sslbl.abuse.ch
-  and FoxIO's `ja4db.foxio.io` (the latter's real database sits behind a
-  signup/auth-gated API, not a public download). The lookup path is real
-  and wired up; it just has nothing to match against yet. JA3 (which does
-  have a real public feed) already satisfies PS 26145 (d)'s
-  "JA3/JA3S or JA4" wording on its own.
+- **No public JA4 threat-intel *feed* exists** — checked directly against
+  both sslbl.abuse.ch and FoxIO's `ja4db.foxio.io` (the latter's real
+  database sits behind a signup/auth-gated API, not a public download).
+  As of 2026-09-13, `ja4_blacklist.json` is no longer empty: 5 real hashes
+  were computed directly from real malware pcaps using FoxIO's own
+  reference tool (used once offline, non-commercially, never vendored into
+  this repo) — see `ML_MODELS.md`. A live feed still doesn't exist, but
+  the blacklist itself is no longer a placeholder. JA3 (which does have a
+  real public feed) already satisfies PS 26145 (d)'s "JA3/JA3S or JA4"
+  wording on its own regardless.
 - **C2's ML model is range-gated**, not universally trusted — see §4 and
   `ML_MODELS.md` for exactly why.
 - **No Apache Flink, no Suricata, no real time-series database.** The

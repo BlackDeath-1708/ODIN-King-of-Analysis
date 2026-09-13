@@ -95,7 +95,10 @@ def main():
         n_train_rows=len(X_train), n_test_rows=len(X_test), grouping="domain",
         notes=(
             "Benign REAL (actual HTTPS/QUIC sessions to ~157 distinct real domains). "
-            "Malicious class SYNTHETIC (no ethical real-malware-traffic source) -- see ML_MODELS.md."
+            "Malicious class mostly SYNTHETIC (no ethical source for volume malware-over-TLS "
+            "traffic) plus 22 REAL flows (added 2026-09-13) from a real 2024 Latrodectus/Lumma "
+            "Stealer infection pcap, matched to analyst-confirmed C2/malicious-infra domains -- "
+            "see ML_MODELS.md's 'TLS real-malicious-data addition' section."
         ),
     )
 

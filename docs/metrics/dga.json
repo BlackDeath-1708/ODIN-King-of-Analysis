@@ -1,21 +1,21 @@
 {
   "confusion_matrix": {
-    "tp": 2578,
-    "fp": 9,
-    "tn": 2391,
-    "fn": 22
+    "tp": 3770,
+    "fp": 6,
+    "tn": 2394,
+    "fn": 30
   },
-  "precision": 0.9965,
-  "recall": 0.9915,
-  "f1": 0.994,
-  "false_positive_rate": 0.0037,
-  "false_negative_rate": 0.0085,
-  "accuracy": 0.9938,
-  "test_set_size": 5000,
+  "precision": 0.9984,
+  "recall": 0.9921,
+  "f1": 0.9952,
+  "false_positive_rate": 0.0025,
+  "false_negative_rate": 0.0079,
+  "accuracy": 0.9942,
+  "test_set_size": 6200,
   "detector": "dga",
-  "n_train_rows": 20000,
-  "n_test_rows": 5000,
+  "n_train_rows": 24800,
+  "n_test_rows": 6200,
   "grouping": "query length bucket",
-  "notes": "Fully synthetic malicious class (9 published-DGA-algorithm-family generators: Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/Ramnit/Banjori/Suppobox/Matsnu). Benign class mixes single-dictionary-word hostnames with real, well-known domains plus realistic subdomain prefixes/depths (added 2026-09-11 after the bare-word-only generator false-positived on real ambient DNS traffic -- see ML_MODELS.md's 'DGA benign-distribution gap' section). No real malware DGA traffic used.",
-  "generated_at": "2026-09-11T11:26:08Z"
+  "notes": "Malicious class: 9 synthetic published-DGA-algorithm-family generators (Conficker/Cryptolocker/Zeus GameOver/Necurs/Tinba/Ramnit/Banjori/Suppobox/Matsnu) plus 6,000 REAL malware-DGA domains from UMUDGA (Zago et al. 2020, DOI 10.17632/y8ph45msv8.1, MIT licensed) -- the literal output of real malware DGA code, not a re-implementation of a published algorithm's shape. See scripts/download_umudga_dga.py and ML_MODELS.md for sourcing details. Benign class mixes single-dictionary-word hostnames with real, well-known domains plus realistic subdomain prefixes/depths (added 2026-09-11 after the bare-word-only generator false-positived on real ambient DNS traffic -- see ML_MODELS.md's 'DGA benign-distribution gap' section).",
+  "generated_at": "2026-09-13T01:11:56Z"
 }

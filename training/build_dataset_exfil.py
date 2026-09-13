@@ -56,6 +56,27 @@ EXTERNAL_HOSTS = {"8.8.8.8", "1.1.1.1", "9.9.9.9"}
 FEATURE_NAMES = ["orig_bytes", "resp_bytes", "byte_ratio", "duration",
                   "orig_pkts", "resp_pkts", "bytes_per_sec", "is_icmp", "to_dns", "to_common_port"]
 
+# 2026-09-12 dataset-plan retrofit: see training/scenarios/exfil/README.md.
+# group prefixes are fixed by this file's own row-builders below, so this
+# mapping is exhaustive by construction (an unmatched prefix is a bug).
+_SCENARIO_BY_PREFIX = {
+    "local_benign_": ("exfil_local_benign", None, "real"),
+    "local_high_upload_": ("exfil_local_high_upload", "bulk_exfil", "real"),
+    "real_icmp_covert_": ("exfil_real_icmp_covert", "icmp_covert", "real"),
+    "real_dns_exfil_": ("exfil_real_dns_exfil", "dns_tunnel_exfil", "real"),
+    "synthetic_benign_": ("exfil_synthetic_benign", None, "synthetic"),
+    "synthetic_bulk_": ("exfil_synthetic_bulk", "bulk_exfil", "synthetic"),
+    "synthetic_icmp_": ("exfil_synthetic_icmp", "icmp_covert", "synthetic"),
+    "synthetic_dns_": ("exfil_synthetic_dns", "dns_tunnel_exfil", "synthetic"),
+}
+
+
+def _scenario_for(group: str) -> tuple[str, str | None, str]:
+    for prefix, info in _SCENARIO_BY_PREFIX.items():
+        if group.startswith(prefix):
+            return info
+    raise ValueError(f"no scenario mapping for group={group!r}")
+
 
 def _row_from_conn(d: dict, label: int, group: str) -> dict | None:
     event = {
@@ -68,7 +89,10 @@ def _row_from_conn(d: dict, label: int, group: str) -> dict | None:
         "dst_port": d.get("id.resp_p", 0) or 0,
     }
     feat, _ = ExfilDetector._extract(event)
-    return {"label": label, "group": group, **dict(zip(FEATURE_NAMES, feat))}
+    scenario_id, attack_subtype, source = _scenario_for(group)
+    return {"label": label, "group": group, "source": source, "scenario_id": scenario_id,
+            "attack_subtype": attack_subtype, "label_method": "generator_ground_truth",
+            **dict(zip(FEATURE_NAMES, feat))}
 
 
 def build_local_rows() -> tuple[list, list]:
@@ -124,7 +148,10 @@ def _synthetic_row(orig, resp, dur, orig_pkts, resp_pkts, dst_port, label, group
     event = {"orig_bytes": orig, "resp_bytes": resp, "duration": dur,
               "orig_pkts": orig_pkts, "resp_pkts": resp_pkts, "proto": proto, "dst_port": dst_port}
     feat, _ = ExfilDetector._extract(event)
-    return {"label": label, "group": group, **dict(zip(FEATURE_NAMES, feat))}
+    scenario_id, attack_subtype, source = _scenario_for(group)
+    return {"label": label, "group": group, "source": source, "scenario_id": scenario_id,
+            "attack_subtype": attack_subtype, "label_method": "generator_ground_truth",
+            **dict(zip(FEATURE_NAMES, feat))}
 
 
 def gen_synthetic_benign(n: int) -> list:

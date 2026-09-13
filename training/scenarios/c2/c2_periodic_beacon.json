@@ -1,0 +1,29 @@
+{
+  "scenario_id": "c2_periodic_beacon",
+  "threat_class": "c2",
+  "is_malicious": true,
+  "attack_subtype": "periodic_beacon",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_c2.py",
+  "configuration": {
+    "base_interval_sec": [
+      3,
+      6
+    ],
+    "jitter_pct": 15,
+    "beacon_count": [
+      10,
+      15
+    ]
+  },
+  "expected_behavior": {
+    "cv": "low (~0.1-0.2)",
+    "periodicity_score": "high"
+  },
+  "repetitions": 65,
+  "applies_to_datasets": [
+    "training/dataset_c2.csv (via dataset_c2_original.csv)"
+  ],
+  "notes": "Real periodic TCP connects -- PS 26145's own suggested 'sandboxed C2 emulator' methodology."
+}

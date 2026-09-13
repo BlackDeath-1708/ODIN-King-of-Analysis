@@ -39,6 +39,16 @@ SNAPSHOT_STEP = 0.15
 BOUNDARY_MARGIN = 1.0
 SRC_IP = "127.0.0.1"
 
+# 2026-09-12 dataset-plan retrofit: see training/scenarios/recon/README.md.
+def _scenario_for(session_id: str) -> tuple[str, str | None]:
+    if session_id.startswith("benign_http_"):
+        return "recon_benign_http_baseline", None
+    if session_id.startswith("benign_"):
+        return "recon_benign_baseline", None
+    if session_id.startswith("recon_"):
+        return "recon_port_scan", "port_scan"
+    raise ValueError(f"no scenario mapping for session_id={session_id!r}")
+
 
 def load_sessions(path):
     with open(path) as f:
@@ -115,7 +125,10 @@ def build():
             window_start = max(sess["start"], t - WINDOW_SECONDS)
             window = [e for e in sess_events if window_start <= e["ts"] <= t]
             if window:
-                row = {"session_id": sess["session_id"], "label": sess["class"], "ts": t}
+                scenario_id, attack_subtype = _scenario_for(sess["session_id"])
+                row = {"session_id": sess["session_id"], "label": sess["class"], "ts": t,
+                       "source": "real", "scenario_id": scenario_id,
+                       "attack_subtype": attack_subtype, "label_method": "generator_ground_truth"}
                 row.update(features_for_window(window))
                 rows.append(row)
             t += SNAPSHOT_STEP

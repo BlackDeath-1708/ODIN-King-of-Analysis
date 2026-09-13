@@ -1,0 +1,30 @@
+{
+  "scenario_id": "ddos_spoofed_source",
+  "threat_class": "ddos",
+  "is_malicious": true,
+  "attack_subtype": "spoofed_source",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_ddos_udp_spoof.py",
+  "configuration": {
+    "tool": "hping3 -2 --rand-source",
+    "dst_ports": "19140-19169",
+    "target_rate_pps": [
+      10,
+      300
+    ],
+    "duration_sec": [
+      8,
+      20
+    ]
+  },
+  "expected_behavior": {
+    "unique_src_ips": "high",
+    "src_ip_entropy": "high (non-zero-variance)"
+  },
+  "repetitions": 40,
+  "applies_to_datasets": [
+    "training/dataset_ddos.csv"
+  ],
+  "notes": "Genuinely varied non-local source addresses -- verified via Zeek (local_orig:false)."
+}

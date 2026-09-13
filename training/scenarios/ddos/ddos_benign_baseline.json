@@ -1,0 +1,30 @@
+{
+  "scenario_id": "ddos_benign_baseline",
+  "threat_class": "ddos",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_ddos.py",
+  "configuration": {
+    "tool": "TCP connect()",
+    "duration_sec": [
+      15,
+      30
+    ],
+    "ports": "1-3 fixed ports from a pool",
+    "pace_sec": [
+      0.5,
+      1.5
+    ]
+  },
+  "expected_behavior": {
+    "packet_rate": "low",
+    "timing": "human-paced, irregular"
+  },
+  "repetitions": 65,
+  "applies_to_datasets": [
+    "training/dataset_ddos.csv"
+  ],
+  "notes": "Paired negative for ddos_syn_flood."
+}

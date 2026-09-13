@@ -1,0 +1,29 @@
+{
+  "scenario_id": "ddos_benign_udpspoof_baseline",
+  "threat_class": "ddos",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_ddos_udp_spoof.py",
+  "configuration": {
+    "tool": "TCP connect()",
+    "duration_sec": [
+      15,
+      30
+    ],
+    "ports": "1-3 from pool 8080-8130",
+    "pace_sec": [
+      0.5,
+      1.5
+    ]
+  },
+  "expected_behavior": {
+    "packet_rate": "low"
+  },
+  "repetitions": 40,
+  "applies_to_datasets": [
+    "training/dataset_ddos.csv"
+  ],
+  "notes": "Paired negative for ddos_udp_flood / ddos_spoofed_source."
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "dga_banjori",
+  "threat_class": "dga",
+  "is_malicious": true,
+  "attack_subtype": "dga",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/train_dga.py:gen_banjori",
+  "configuration": {
+    "family": "Banjori (published algorithm)"
+  },
+  "expected_behavior": {
+    "entropy": "moderate (dictionary-seeded)",
+    "ngram_score": "low-moderate"
+  },
+  "repetitions": 1000,
+  "applies_to_datasets": [
+    "in-memory only -- train_dga.py, not persisted to a CSV"
+  ],
+  "notes": null
+}

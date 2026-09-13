@@ -1,0 +1,31 @@
+{
+  "scenario_id": "tls_malicious_real_latrodectus_lumma_2024",
+  "threat_class": "tls",
+  "is_malicious": true,
+  "attack_subtype": "tls_c2_real",
+  "source": "real_public_dataset",
+  "label_method": "dataset_ground_truth",
+  "generator": "training/build_malicious_pcap_logs.py + training/build_dataset_tls.py:build_real_malicious_rows",
+  "configuration": {
+    "dataset": "malware-traffic-analysis.net",
+    "post": "2024-03-07 - Latrodectus infection leads to Lumma Stealer",
+    "pcap": "2024-03-07-Latrodectus-infection-with-Lumma-Stealer.pcap",
+    "confirmed_malicious_domains": [
+      "horaot.org", "aytobusesre.com", "popfealt.one", "auctiondecadecontaii.shop"
+    ],
+    "excluded_domains_seen_in_same_pcap": {
+      "firebasestorage.googleapis.com": "legitimate Google infrastructure abused for hosting -- not malicious infra itself",
+      "lufyfeo.org": "initial email-link redirect, not named under the IOC file's own C2/malicious-infra sections"
+    }
+  },
+  "expected_behavior": {
+    "provenance": "real malware, not a generator artifact",
+    "beacon_timing": "aytobusesre.com and popfealt.one show real repeated ClientHellos roughly 10-30 minutes apart per the post's own traffic log -- genuine beacon-like C2 timing, not incidental"
+  },
+  "repetitions": 22,
+  "applies_to_datasets": [
+    "training/dataset_tls.csv (flow-stats RF -- previously had ZERO real malicious rows)",
+    "training/dataset_tls_seq.npz (tier2 seq-CNN -- see 2026-09-13 finding below; NOT currently reflected in the shipped tier2 model)"
+  ],
+  "notes": "Two other 2024 malware-traffic-analysis.net samples (SSLoad/Cobalt Strike, DarkGate) were also pulled and inspected via their own analyst-confirmed IOC files first -- both use plain HTTP, not TLS, for their actual C2 in these specific captures, so they contribute nothing to this dataset; documented rather than force-fit. Adding these 22 rows to the flow-stats RF model (train_tls_flow.py) worked cleanly (held-out F1 0.999). Adding them to the separate tier2 seq-CNN dataset (train_tier2.py) and retraining produced a verified calibration regression -- 2 of 5 spot-checked real benign flows scored 0.82/0.9997 malicious via the actual serve-time predict() path, reproduced twice, not a one-off. That retrained tier2 model/calibration was reverted to its prior committed version; only the flow-stats RF model shipped this addition. See ML_MODELS.md's 'TLS real-malicious-data addition' section."
+}

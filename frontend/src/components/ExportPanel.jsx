@@ -35,7 +35,8 @@ function downloadBlob(content, filename, mimeType) {
 
 const CSV_COLUMNS = [
   'timestamp', 'flow_id', 'threat_class', 'threat_label', 'severity',
-  'confidence', 'calibrated', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'detector',
+  'confidence', 'calibrated', 'detection_method', 'src_ip', 'src_port', 'dst_ip', 'dst_port',
+  'detector', 'seq', 'record_hash',
 ]
 
 function toCsv(alerts) {
@@ -50,7 +51,23 @@ function toCsv(alerts) {
 
 function ExportPanel({ alerts }) {
   const [status, setStatus] = useState(null)
+  const [chainResult, setChainResult] = useState(null)
+  const [chainChecking, setChainChecking] = useState(false)
   const safeAlerts = Array.isArray(alerts) ? alerts : []
+
+  const verifyChain = async () => {
+    setChainChecking(true)
+    setChainResult(null)
+    try {
+      const res = await fetch('/api/alerts/verify')
+      const data = await res.json()
+      setChainResult(data)
+    } catch {
+      setChainResult({ valid: false, detail: 'Verification request failed — check the API connection.' })
+    } finally {
+      setChainChecking(false)
+    }
+  }
 
   const withStatus = async (label, fn) => {
     setStatus(`Preparing ${label}…`)
@@ -138,6 +155,36 @@ function ExportPanel({ alerts }) {
       </div>
 
       {status && <p className="export-panel__status">{status}</p>}
+
+      <div className="forensic-chain">
+        <div className="export-panel__option-title">Forensic Chain-of-Custody</div>
+        <p className="export-panel__option-desc">
+          PS 26145&rsquo;s architecture is justified on the grounds that a one-way, read-only ingest
+          &ldquo;preserves a clean chain of custody for forensic use.&rdquo; Every alert is written with a
+          SHA-256 hash covering its own content plus the previous alert&rsquo;s hash — changing, deleting,
+          reordering, or inserting any past record breaks every hash after it. This independently
+          recomputes that chain from the very first alert and reports whether it&rsquo;s still intact.
+        </p>
+        <button type="button" className="btn" onClick={verifyChain} disabled={chainChecking}>
+          {chainChecking ? 'Verifying…' : 'Verify Chain Integrity'}
+        </button>
+
+        {chainResult && (
+          <div
+            className={`forensic-chain__result ${chainResult.valid ? 'is-valid' : 'is-broken'}`}
+          >
+            <span className="forensic-chain__result-icon">{chainResult.valid ? '✓' : '✗'}</span>
+            <div>
+              <div className="forensic-chain__result-headline">
+                {chainResult.valid
+                  ? `Chain intact — ${chainResult.verified ?? 0} alert record(s) verified`
+                  : `Chain broken${chainResult.broken_at != null ? ` at record #${chainResult.broken_at}` : ''}`}
+              </div>
+              <div className="forensic-chain__result-detail">{chainResult.detail}</div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

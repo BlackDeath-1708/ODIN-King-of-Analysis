@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
 import alert_export
+import forensic_chain
 
 app = Flask(__name__)
 CORS(app)
@@ -75,10 +76,24 @@ def get_alerts_cef():
     return Response("\n".join(lines), mimetype="text/plain")
 
 
+@app.route("/api/alerts/verify")
+def verify_alerts_chain():
+    """Forensic chain-of-custody check (PS 26145: 'preserves a clean chain
+    of custody for forensic use') -- independently recomputes the SHA-256
+    hash chain over the full alerts.json from genesis and reports whether
+    every record is provably unmodified since it was written. See
+    forensic_chain.py. Read-only; safe to call repeatedly (e.g. a "Verify
+    Chain Integrity" button)."""
+    return jsonify(forensic_chain.verify_chain(ALERTS_FILE))
+
+
 @app.route("/api/stats")
 def get_stats():
     alerts = read_alerts(500)
-    stats = {"ddos": 0, "recon": 0, "c2": 0, "dga": 0, "tls": 0, "exfil": 0, "MULTI_VECTOR": 0, "total": len(alerts)}
+    stats = {
+        "ddos": 0, "recon": 0, "c2": 0, "dga": 0, "tls": 0, "exfil": 0,
+        "MULTI_VECTOR": 0, "MULTI_VECTOR_ANOMALY": 0, "total": len(alerts),
+    }
     for a in alerts:
         tc = a.get("threat_class", "")
         if tc in stats:

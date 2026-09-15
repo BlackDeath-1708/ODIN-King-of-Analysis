@@ -68,6 +68,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .base import Detector
+from .features import feature_contributions
 
 MIN_OBSERVATIONS = 5      # need at least this many connections to judge periodicity
 CV_THRESHOLD     = 0.35   # coefficient of variation cutoff -- fallback rule, and the only
@@ -127,6 +128,83 @@ class C2Detector(Detector):
             return None, False
 
     def process(self, event: dict) -> dict | None:
+        ctx = self._prepare(event)
+        if ctx is None:
+            return None
+        if self.model is not None and ctx["model_in_range"]:
+            vector = [[ctx["observation_count"], ctx["mean_interval"], ctx["std_interval"], ctx["cv"]]]
+            confidence = float(self.model.predict_proba(vector)[0][1])
+            return self._finish(ctx, confidence > 0.5, confidence, self._ml_detection_line(confidence),
+                                 self.calibrated, "ml")
+        triggered, confidence, detection_line, detection_method = self._fallback_decision(ctx)
+        return self._finish(ctx, triggered, confidence, detection_line, False, detection_method)
+
+    def process_batch(self, events: list) -> list:
+        """See base.Detector.process_batch. Unlike ddos.py/recon.py, whether
+        a given event is ML-eligible (model_in_range) varies per-event within
+        one batch (it depends on each key's own observation_count/mean_interval,
+        not a fixed instance-wide flag) -- so this scores the ML-eligible
+        subset in one batched predict_proba() call up front, WITHOUT calling
+        _finish() yet, then finishes every prepared event in original
+        chronological order. That ordering matters here specifically: _finish
+        mutates self._alerted (a per-key one-shot dedup, not a time cooldown),
+        so finishing out of order could let a later event in the batch
+        "claim" a key's one alert before an earlier event in the same batch
+        does -- a different outcome than calling process() one at a time.
+        """
+        results = [None] * len(events)
+        prepared = []  # [(index, ctx), ...], in original event order
+        for i, event in enumerate(events):
+            ctx = self._prepare(event)
+            if ctx is not None:
+                prepared.append((i, ctx))
+
+        if not prepared:
+            return results
+
+        ml_confidence = {}  # index -> confidence, for the subset scored by the model
+        ml_entries = [(i, ctx) for i, ctx in prepared if self.model is not None and ctx["model_in_range"]]
+        if ml_entries:
+            vectors = [[ctx["observation_count"], ctx["mean_interval"], ctx["std_interval"], ctx["cv"]]
+                       for _, ctx in ml_entries]
+            probas = self.model.predict_proba(vectors)[:, 1]
+            for (i, _), p in zip(ml_entries, probas):
+                ml_confidence[i] = float(p)
+
+        for i, ctx in prepared:
+            if i in ml_confidence:
+                confidence = ml_confidence[i]
+                results[i] = self._finish(ctx, confidence > 0.5, confidence, self._ml_detection_line(confidence),
+                                           self.calibrated, "ml")
+            else:
+                triggered, confidence, detection_line, detection_method = self._fallback_decision(ctx)
+                results[i] = self._finish(ctx, triggered, confidence, detection_line, False, detection_method)
+        return results
+
+    @staticmethod
+    def _ml_detection_line(confidence: float) -> str:
+        return (f"ML classifier (RandomForest) flagged this connection pattern as beaconing "
+                f"(model confidence: {confidence:.0%})")
+
+    def _fallback_decision(self, ctx: dict) -> tuple:
+        cv = ctx["cv"]
+        triggered = cv <= CV_THRESHOLD
+        confidence = 0.6 + min((CV_THRESHOLD - cv) / CV_THRESHOLD * 0.35, 0.35)
+        reason = "fixed-threshold rule" if self.model is None else "fixed-threshold rule -- beyond the model's validated range"
+        detection_line = f"Detection reason: stable periodic beaconing interval ({reason})"
+        # Distinguishes WHY the rule fallback ran, not just that it did --
+        # "out_of_range" is the interesting case (model loaded fine, but
+        # this specific input sits beyond MODEL_MAX_OBSERVATIONS/
+        # MODEL_MAX_MEAN_INTERVAL, see module docstring's range-gate
+        # history) vs "no_model" (model file missing/failed to load
+        # entirely). Surfaced as its own top-level alert field so the
+        # frontend can show this distinction without parsing evidence text.
+        detection_method = "rule_fallback_out_of_range" if self.model is not None else "rule_fallback_no_model"
+        return triggered, confidence, detection_line, detection_method
+
+    def _prepare(self, event: dict) -> dict | None:
+        """State update (self._connections) + range gating, identical
+        whether reached via process() or process_batch()."""
         if event.get("log_type", "conn") != "conn":
             return None
 
@@ -159,41 +237,49 @@ class C2Detector(Detector):
             and mean_interval <= MODEL_MAX_MEAN_INTERVAL
         )
 
-        used_ml = self.model is not None and model_in_range
-        if used_ml:
-            vector = [[len(observations), mean_interval, std_interval, cv]]
-            prediction = self.model.predict(vector)[0]
-            confidence = float(self.model.predict_proba(vector)[0][1])
-            triggered = prediction == 1
-            detection_line = (
-                f"ML classifier (RandomForest) flagged this connection pattern as beaconing "
-                f"(model confidence: {confidence:.0%})"
-            )
-        else:
-            triggered = cv <= CV_THRESHOLD
-            confidence = 0.6 + min((CV_THRESHOLD - cv) / CV_THRESHOLD * 0.35, 0.35)
-            reason = "fixed-threshold rule" if self.model is None else "fixed-threshold rule -- beyond the model's validated range"
-            detection_line = f"Detection reason: stable periodic beaconing interval ({reason})"
+        return {
+            # observation_count is a snapshot int, NOT a reference to
+            # self._connections[key] -- that list keeps growing as later
+            # events for the same key are prepared, and in process_batch()
+            # every event's _prepare() runs before any event's _finish()
+            # (see process_batch()'s docstring), so a live list reference
+            # here would read the batch's FINAL count for every earlier
+            # event sharing this key instead of the count at that event's
+            # own moment. Caught by tests/test_batch_inference.py.
+            "ts": ts, "src_ip": src_ip, "dst_ip": dst_ip, "dst_port": dst_port, "flow_id": event.get("uid"),
+            "key": key, "observation_count": len(observations), "mean_interval": mean_interval,
+            "std_interval": std_interval, "cv": cv, "model_in_range": model_in_range,
+        }
 
+    def _finish(self, ctx: dict, triggered: bool, confidence: float, detection_line: str,
+                calibrated: bool, detection_method: str):
         if not triggered:
             return None
+        key = ctx["key"]
         if key in self._alerted:
             return None
         self._alerted.add(key)
 
+        observation_count = ctx["observation_count"]
         evidence = [
             detection_line,
-            f"Repeated connections: {len(observations)} to {dst_ip}:{dst_port}",
-            f"Mean inter-arrival interval: {mean_interval}s",
-            f"Standard deviation: {std_interval}s",
-            f"Coefficient of variation: {cv} (informational -- fixed-threshold rule used <{CV_THRESHOLD})",
+            f"Repeated connections: {observation_count} to {ctx['dst_ip']}:{ctx['dst_port']}",
+            f"Mean inter-arrival interval: {ctx['mean_interval']}s",
+            f"Standard deviation: {ctx['std_interval']}s",
+            f"Coefficient of variation: {ctx['cv']} (informational -- fixed-threshold rule used <{CV_THRESHOLD})",
         ]
 
         severity = "HIGH"
+        used_ml = detection_method == "ml"
+        feat_values = {
+            "observation_count": observation_count, "mean_interval": ctx["mean_interval"],
+            "std_interval": ctx["std_interval"], "cv": ctx["cv"],
+        }
 
         return self.alert(
-            src_ip=src_ip, src_port=None, dst_ip=dst_ip, dst_port=dst_port,
-            flow_id=event.get("uid"), severity=severity, confidence=confidence,
-            evidence=evidence, window_seconds=MAX_INTERVAL, event_ts=ts,
-            calibrated=(self.calibrated if used_ml else False),
+            src_ip=ctx["src_ip"], src_port=None, dst_ip=ctx["dst_ip"], dst_port=ctx["dst_port"],
+            flow_id=ctx["flow_id"], severity=severity, confidence=confidence,
+            evidence=evidence, window_seconds=MAX_INTERVAL, event_ts=ctx["ts"],
+            calibrated=calibrated, detection_method=detection_method,
+            feature_contributions=(feature_contributions(self.model, FEATURES, feat_values) if used_ml else None),
         )

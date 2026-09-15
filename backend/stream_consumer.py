@@ -27,6 +27,7 @@ from pathlib import Path
 from kafka import KafkaConsumer
 
 import alert_export
+import forensic_chain
 from detectors import ACTIVE_DETECTORS
 from correlation.correlator import CorrelationEngine
 
@@ -39,6 +40,8 @@ STIX_FILE       = Path("alerts.stix.jsonl")
 HEARTBEAT_FILE  = Path(".heartbeat")
 THROUGHPUT_FILE = Path(".throughput")
 THROUGHPUT_WINDOW_SECONDS = 10
+POLL_TIMEOUT_MS  = 100  # micro-batch flush deadline -- see run()'s docstring comment
+POLL_MAX_RECORDS = 64   # micro-batch size cap, whichever bound hits first
 
 
 def _extract_common(raw: dict) -> dict:
@@ -279,6 +282,12 @@ def connect_consumer(retries=30, delay=2):
 
 
 def write_alert(alert: dict):
+    # Forensic chain-of-custody (PS 26145: "preserves a clean chain of
+    # custody for forensic use") -- see forensic_chain.py. Must happen
+    # BEFORE the write below so seq/prev_hash/record_hash land in the same
+    # line as everything else, not as a separate record.
+    forensic_chain.append_chain_fields(alert, ALERTS_FILE)
+
     with open(ALERTS_FILE, "a") as f:
         f.write(json.dumps(alert) + "\n")
     print(f"[ALERT] {alert['threat_label']} detected | confidence={alert['confidence']} | src={alert['src_ip']}")
@@ -332,40 +341,69 @@ def run():
 
     consumed = 0
     recent_arrivals = deque()   # wall-clock times of recently consumed events
-    for message in consumer:
-        touch_heartbeat()
-        event = normalize_event(message.value)
-        if event is None:
+
+    # Micro-batching (ODIN throughput plan, Phase A1): scikit-learn's
+    # per-call predict_proba() overhead (~12ms, see docs/benchmark_results.json's
+    # bottleneck_finding) dominated sustained throughput when each event was
+    # dispatched to every detector's process() individually. consumer.poll()
+    # (vs. the old blocking `for message in consumer:` iterator) bounds how
+    # long a batch can wait to fill -- POLL_TIMEOUT_MS keeps per-alert
+    # latency far inside the PS's "bounded latency, not an end-of-run
+    # report" requirement, while POLL_MAX_RECORDS caps memory/CNN-cost for
+    # a burst. Every detector still sees every event exactly once, in
+    # arrival order -- only the model call itself is batched.
+    while True:
+        polled = consumer.poll(timeout_ms=POLL_TIMEOUT_MS, max_records=POLL_MAX_RECORDS)
+        if not polled:
             continue
-        consumed += 1
 
-        now = time.time()
-        recent_arrivals.append(now)
-        cutoff = now - THROUGHPUT_WINDOW_SECONDS
-        while recent_arrivals and recent_arrivals[0] < cutoff:
-            recent_arrivals.popleft()
-        write_throughput(len(recent_arrivals) / THROUGHPUT_WINDOW_SECONDS, consumed)
+        buffer = []  # normalized, enriched events ready for detector dispatch
+        for messages in polled.values():
+            for message in messages:
+                touch_heartbeat()
+                event = normalize_event(message.value)
+                if event is None:
+                    continue
+                consumed += 1
 
-        if consumed % 25 == 0:
-            print(f"[STREAM] {consumed} events consumed from Kafka")
+                now = time.time()
+                recent_arrivals.append(now)
+                cutoff = now - THROUGHPUT_WINDOW_SECONDS
+                while recent_arrivals and recent_arrivals[0] < cutoff:
+                    recent_arrivals.popleft()
+                write_throughput(len(recent_arrivals) / THROUGHPUT_WINDOW_SECONDS, consumed)
 
-        # ssl.log/quic.log rows need their byte/duration fields joined in
-        # from the matching conn.log row (see FlowByteEnricher) before any
-        # detector sees them -- conn/dns events pass through untouched.
-        to_dispatch = [event]
-        if event["log_type"] == "conn":
-            to_dispatch += ssl_enricher.handle_conn(event)
-        elif event["log_type"] in ("ssl", "quic"):
-            resolved = ssl_enricher.handle_ssl(event)
-            to_dispatch = [resolved] if resolved is not None else []
-        elif event["log_type"] == "pktseq":
-            ssl_enricher.handle_pktseq(event)
-            to_dispatch = []  # enrichment-only, never dispatched to detectors itself
-        to_dispatch += ssl_enricher.expire_stale(event.get("ts", 0.0))
+                if consumed % 25 == 0:
+                    print(f"[STREAM] {consumed} events consumed from Kafka")
 
-        for ev in to_dispatch:
-            for detector in detectors:
-                alert = detector.process(ev)
+                # ssl.log/quic.log rows need their byte/duration fields joined in
+                # from the matching conn.log row (see FlowByteEnricher) before any
+                # detector sees them -- conn/dns events pass through untouched.
+                to_dispatch = [event]
+                if event["log_type"] == "conn":
+                    to_dispatch += ssl_enricher.handle_conn(event)
+                elif event["log_type"] in ("ssl", "quic"):
+                    resolved = ssl_enricher.handle_ssl(event)
+                    to_dispatch = [resolved] if resolved is not None else []
+                elif event["log_type"] == "pktseq":
+                    ssl_enricher.handle_pktseq(event)
+                    to_dispatch = []  # enrichment-only, never dispatched to detectors itself
+                to_dispatch += ssl_enricher.expire_stale(event.get("ts", 0.0))
+                buffer.extend(to_dispatch)
+
+        if not buffer:
+            continue
+
+        # One process_batch() call per detector for the whole buffer (the
+        # actual batching -- see each detector's process_batch() for how
+        # the model call is deferred/batched internally), THEN replay
+        # results in the original event-outer/detector-inner order so
+        # alert emission and correlator.ingest() see events in exactly the
+        # same sequence a per-event dispatch loop would have produced.
+        results_by_detector = [detector.process_batch(buffer) for detector in detectors]
+        for event_idx in range(len(buffer)):
+            for detector_idx in range(len(detectors)):
+                alert = results_by_detector[detector_idx][event_idx]
                 if alert:
                     write_alert(alert)
                     correlated = correlator.ingest(alert)

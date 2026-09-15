@@ -49,7 +49,7 @@ from collections import deque
 from pathlib import Path
 
 from .base import Detector
-from .features import shannon_entropy, interval_stats
+from .features import shannon_entropy, interval_stats, feature_contributions
 
 WINDOW_SECONDS        = 10
 PACKET_RATE_THRESHOLD = 200   # fallback-only: retained as evidence context, no longer the trigger
@@ -166,6 +166,55 @@ class DDoSDetector(Detector):
             return None, False
 
     def process(self, event: dict) -> dict | None:
+        prep = self._prepare(event)
+        if prep is None:
+            return None
+        kind, payload = prep
+        if kind == "alert":
+            return payload
+        ctx = payload
+        vector = [[ctx["feat"][name] for name in FEATURES]]
+        confidence = float(self.model.predict_proba(vector)[0][1])
+        return self._finish(ctx, confidence > 0.5, confidence, self._ml_detection_line(confidence), used_ml=True)
+
+    def process_batch(self, events: list) -> list:
+        """See base.Detector.process_batch: state updates (window/cooldown/
+        entropy-baseline) happen per-event in order via _prepare(), exactly
+        as process() does; only the model call is deferred and batched
+        across every event in this call that actually needs scoring."""
+        results = [None] * len(events)
+        pending = []  # [(index, ctx), ...]
+        for i, event in enumerate(events):
+            prep = self._prepare(event)
+            if prep is None:
+                continue
+            kind, payload = prep
+            if kind == "alert":
+                results[i] = payload
+            else:
+                pending.append((i, payload))
+
+        if pending:
+            vectors = [[ctx["feat"][name] for name in FEATURES] for _, ctx in pending]
+            probas = self.model.predict_proba(vectors)[:, 1]
+            for (i, ctx), p in zip(pending, probas):
+                confidence = float(p)
+                results[i] = self._finish(
+                    ctx, confidence > 0.5, confidence, self._ml_detection_line(confidence), used_ml=True,
+                )
+        return results
+
+    @staticmethod
+    def _ml_detection_line(confidence: float) -> str:
+        return f"ML classifier (RandomForest) flagged this window as a flood (model confidence: {confidence:.0%})"
+
+    def _prepare(self, event: dict):
+        """Runs every event's state updates + non-ML gating/fallback exactly
+        once, in call order -- identical whether reached via process() or
+        process_batch(). Returns None (nothing to do), ("alert", alert-or-None)
+        (fully resolved -- slow-exhaustion path, or the no-model fallback
+        rule), or ("score", ctx) when an ML model call is still needed
+        (deferred so process_batch() can batch it across the whole buffer)."""
         if event.get("proto") not in ("tcp", "udp"):
             return None
 
@@ -194,13 +243,13 @@ class DDoSDetector(Detector):
                     f"This connection: duration {duration:.1f}s, {orig_bytes} bytes sent",
                     f"Destination: {dst_ip}:{dst_port}",
                 ]
-                return self.alert(
+                return ("alert", self.alert(
                     src_ip=src_ip, src_port=None, dst_ip=dst_ip, dst_port=dst_port,
                     flow_id=event.get("uid"), severity="HIGH",
                     confidence=min(0.95, 0.6 + slow_count / 100),
                     evidence=evidence, window_seconds=SlowExhaustionTracker.WINDOW_SECONDS,
-                    event_ts=ts, calibrated=False,
-                )
+                    event_ts=ts, calibrated=False, detection_method="rule_based",
+                ))
 
         self._window.append((ts, src_ip, dst_port))
         cutoff = ts - WINDOW_SECONDS
@@ -230,24 +279,34 @@ class DDoSDetector(Detector):
         anomalous, sigma = self._entropy_baseline.is_anomalous(ts, feat["dst_port_entropy"])
         self._entropy_baseline.update(ts, feat["dst_port_entropy"])
 
-        used_ml = self.model is not None
-        if used_ml:
-            vector = [[feat[name] for name in FEATURES]]
-            prediction = self.model.predict(vector)[0]
-            confidence = float(self.model.predict_proba(vector)[0][1])
-            triggered = prediction == 1
-            detection_line = f"ML classifier (RandomForest) flagged this window as a flood (model confidence: {confidence:.0%})"
-        else:
-            triggered = anomalous
-            confidence = 0.6 + min(sigma / 10, 0.35)
-            detection_line = "Detection reason: entropy deviates from adaptive rolling baseline (fallback rule)"
+        ctx = {
+            "ts": ts, "src_ip": src_ip, "dst_ip": dst_ip, "dst_port": dst_port,
+            "flow_id": event.get("uid"), "feat": feat, "packet_rate": packet_rate,
+            "unique_ips": unique_ips, "src_entropy": src_entropy, "sigma": sigma,
+        }
 
+        if self.model is not None:
+            return ("score", ctx)
+
+        confidence = 0.6 + min(sigma / 10, 0.35)
+        detection_line = "Detection reason: entropy deviates from adaptive rolling baseline (fallback rule)"
+        return ("alert", self._finish(ctx, anomalous, confidence, detection_line, used_ml=False))
+
+    def _finish(self, ctx: dict, triggered: bool, confidence: float, detection_line: str, used_ml: bool):
+        """Cooldown + evidence + alert-building -- shared by both the ML path
+        (process/process_batch, after a batched or single predict_proba call)
+        and the no-model fallback rule (_prepare), which previously
+        duplicated this whole block."""
         if not triggered:
             return None
 
+        ts, src_ip = ctx["ts"], ctx["src_ip"]
         if ts - self._last_alerted.get(src_ip, 0) < ALERT_COOLDOWN:
             return None
         self._last_alerted[src_ip] = ts
+
+        feat, packet_rate, unique_ips = ctx["feat"], ctx["packet_rate"], ctx["unique_ips"]
+        src_entropy, sigma, dst_port = ctx["src_entropy"], ctx["sigma"], ctx["dst_port"]
 
         evidence = [
             detection_line,
@@ -268,8 +327,10 @@ class DDoSDetector(Detector):
         severity = "CRITICAL" if packet_rate > PACKET_RATE_THRESHOLD * 3 else "HIGH"
 
         return self.alert(
-            src_ip=src_ip, src_port=None, dst_ip=dst_ip, dst_port=dst_port,
-            flow_id=event.get("uid"), severity=severity, confidence=confidence,
+            src_ip=src_ip, src_port=None, dst_ip=ctx["dst_ip"], dst_port=dst_port,
+            flow_id=ctx["flow_id"], severity=severity, confidence=confidence,
             evidence=evidence, window_seconds=WINDOW_SECONDS, event_ts=ts,
             calibrated=(self.calibrated if used_ml else False),
+            detection_method=("ml" if used_ml else "rule_fallback_no_model"),
+            feature_contributions=(feature_contributions(self.model, FEATURES, feat) if used_ml else None),
         )

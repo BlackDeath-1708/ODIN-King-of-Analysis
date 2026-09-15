@@ -123,6 +123,34 @@ def benchmark_sustained_throughput(detectors, events) -> dict:
     }
 
 
+def benchmark_sustained_throughput_batched(detectors, events, batch_size=64) -> dict:
+    """Same synthetic stream, same detectors -- but dispatched through
+    process_batch() in fixed-size chunks (batch_size=64 matches
+    stream_consumer.py's POLL_MAX_RECORDS) instead of process() per event.
+    Measures the ODIN throughput plan's Phase A1 win directly: one
+    predict_proba() call per detector per chunk instead of one per event.
+    tests/test_batch_inference.py is what guarantees this produces the same
+    alerts as benchmark_sustained_throughput() above -- this function only
+    measures speed, not correctness."""
+    start = time.perf_counter()
+    alert_count = 0
+    for i in range(0, len(events), batch_size):
+        chunk = events[i:i + batch_size]
+        for detector in detectors:
+            alert_count += sum(1 for a in detector.process_batch(chunk) if a is not None)
+        if i and i % 1000 < batch_size:
+            print(f"  ...{i}/{len(events)} events processed (batched) "
+                  f"({time.perf_counter() - start:.1f}s elapsed)", flush=True)
+    elapsed = time.perf_counter() - start
+    return {
+        "test_event_count": len(events),
+        "batch_size": batch_size,
+        "elapsed_seconds": round(elapsed, 4),
+        "sustained_flows_per_sec": round(len(events) / elapsed, 1),
+        "alerts_produced": alert_count,
+    }
+
+
 # One attack-shaped event-sequence generator per detector, reusing the same
 # trigger patterns exercised during development (see ML_MODELS.md). Each
 # takes a distinct src_ip per sample so a single long-lived detector
@@ -213,15 +241,27 @@ def benchmark_per_detector_latency() -> dict:
 
 
 def main():
+    events = generate_synthetic_stream(TEST_EVENT_COUNT)
+
     detectors = [cls() for cls in ACTIVE_DETECTORS]
     print(f"Loaded {len(detectors)} detectors: {', '.join(d.name for d in detectors)}")
-
-    events = generate_synthetic_stream(TEST_EVENT_COUNT)
-    print(f"Generated {len(events)} synthetic events, running sustained-throughput pass...")
+    print(f"Generated {len(events)} synthetic events, running sustained-throughput pass (per-event)...")
     throughput = benchmark_sustained_throughput(detectors, events)
     print(f"  {throughput['sustained_flows_per_sec']} flows/sec "
           f"({throughput['elapsed_seconds']}s for {throughput['test_event_count']} events, "
           f"{throughput['alerts_produced']} alerts)")
+
+    # Fresh detector instances -- reusing `detectors` above would carry over
+    # cooldown/dedup state from the per-event pass and silently change this
+    # pass's alert count, not just its speed.
+    batched_detectors = [cls() for cls in ACTIVE_DETECTORS]
+    print("Running sustained-throughput pass (batched, Phase A1)...")
+    throughput_batched = benchmark_sustained_throughput_batched(batched_detectors, events)
+    print(f"  {throughput_batched['sustained_flows_per_sec']} flows/sec "
+          f"({throughput_batched['elapsed_seconds']}s for {throughput_batched['test_event_count']} events, "
+          f"{throughput_batched['alerts_produced']} alerts)")
+    speedup = round(throughput_batched["sustained_flows_per_sec"] / throughput["sustained_flows_per_sec"], 2)
+    print(f"  Speedup vs. per-event: {speedup}x")
 
     print("Running per-detector latency pass...")
     per_detector_latency_ms = benchmark_per_detector_latency()
@@ -230,28 +270,52 @@ def main():
 
     result = {
         "measurement_scope": (
-            "Python detection-pipeline throughput only (detector.process() calls in a tight "
-            "loop, matching stream_consumer.py's dispatch loop exactly) -- NOT a Kafka-broker "
-            "round-trip measurement. No live Kafka broker was running in this environment "
-            "(port 9092 unreachable) when this benchmark was run; see this script's module "
-            "docstring for why that number isn't faked here."
+            "Python detection-pipeline throughput only (detector.process()/process_batch() calls "
+            "in a tight loop, matching stream_consumer.py's dispatch loop exactly) -- NOT a "
+            "Kafka-broker round-trip measurement (see docs/benchmark_e2e_results.json for that). "
+            "Two passes: 'per_event' (process() once per event, the original measurement) and "
+            "'batched' (process_batch() once per 64-event chunk, matching stream_consumer.py's "
+            "POLL_MAX_RECORDS -- see ODIN throughput plan Phase A1). Both passes run the identical "
+            "synthetic event stream against fresh detector instances; "
+            "tests/test_batch_inference.py is the correctness guarantee that batching doesn't "
+            "change which alerts fire, only how fast."
         ),
+        "per_event": {
+            "sustained_flows_per_sec": throughput["sustained_flows_per_sec"],
+            "test_event_count": throughput["test_event_count"],
+            "elapsed_seconds": throughput["elapsed_seconds"],
+            "alerts_produced_on_synthetic_stream": throughput["alerts_produced"],
+        },
+        "batched": {
+            "sustained_flows_per_sec": throughput_batched["sustained_flows_per_sec"],
+            "batch_size": throughput_batched["batch_size"],
+            "test_event_count": throughput_batched["test_event_count"],
+            "elapsed_seconds": throughput_batched["elapsed_seconds"],
+            "alerts_produced_on_synthetic_stream": throughput_batched["alerts_produced"],
+        },
+        "batching_speedup_x": speedup,
+        # Kept at top level (not just inside "per_event") for anything still
+        # reading the pre-batching schema directly.
         "sustained_flows_per_sec": throughput["sustained_flows_per_sec"],
         "test_event_count": throughput["test_event_count"],
         "elapsed_seconds": throughput["elapsed_seconds"],
         "alerts_produced_on_synthetic_stream": throughput["alerts_produced"],
         "per_detector_latency_ms": per_detector_latency_ms,
         "bottleneck_finding": (
-            "Sustained throughput here is dominated by scikit-learn's per-call inference "
-            "overhead, not by this codebase's own Python logic: a single RandomForest "
+            "Sustained throughput in the per-event pass is dominated by scikit-learn's per-call "
+            "inference overhead, not by this codebase's own Python logic: a single RandomForest "
             "predict()+predict_proba() pair measured ~12ms/call in this environment "
-            "(scikit-learn 1.9.0), and ddos.py/recon.py/c2.py each make that pair of calls "
-            "per qualifying conn event. Verified directly: an unrealistically dense synthetic "
-            "stream (events spaced ~0.01s apart) made ddos.py's/recon.py's rolling windows grow "
-            "to thousands of unpruned entries and dominated cost instead -- an artifact of the "
-            "generator, not a finding about the pipeline -- which is why this benchmark uses "
-            "0.5-3.0s spacing (see generate_synthetic_stream's docstring) to isolate the real "
-            "steady-state bottleneck."
+            "(scikit-learn 1.9.0), and ddos.py/recon.py/c2.py each made that pair of calls "
+            "per qualifying conn event. Phase A1 (see ODIN throughput plan) eliminated the "
+            "redundant predict() call entirely (predict_proba()'s own argmax already implies it) "
+            "and batches every remaining predict_proba() call across a buffer of events -- see "
+            "'batching_speedup_x' above for the measured result, and each detector's "
+            "process_batch() docstring for how state-mutating order is still preserved exactly. "
+            "Verified directly: an unrealistically dense synthetic stream (events spaced ~0.01s "
+            "apart) made ddos.py's/recon.py's rolling windows grow to thousands of unpruned "
+            "entries and dominated cost instead -- an artifact of the generator, not a finding "
+            "about the pipeline -- which is why this benchmark uses 0.5-3.0s spacing (see "
+            "generate_synthetic_stream's docstring) to isolate the real steady-state bottleneck."
         ),
         "hardware": "<fill manually -- run `lscpu | grep \"Model name\"` and note core count/RAM>",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

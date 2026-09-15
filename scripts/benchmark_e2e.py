@@ -216,7 +216,13 @@ async def run_benchmark() -> dict:
             "self-contained 12-core mobile laptop (i7-1255U) running the capture, broker, "
             "and detector pipeline on the same cores as this load generator -- not "
             "dedicated hardware, not a real NIC (loopback only). Numbers here reflect "
-            "single-laptop self-contained capacity, not a production appliance."
+            "single-laptop self-contained capacity, not a production appliance. "
+            "Measured with a real Kafka broker running (docker compose kafka+zeek services) "
+            "and stream_consumer.py's micro-batched detector dispatch (ODIN throughput plan "
+            "Phase A1 -- see docs/benchmark_results.json's 'batching_speedup_x'). A prior run "
+            "on the pre-batching code, same generator config, peaked at 22.2 events/sec "
+            "avg 21.47 -- this run's peak_events_per_sec/avg_events_per_sec below is the "
+            "batched-code result on the same hardware and load shape."
         ),
         "generator_config": {
             "workers": WORKERS, "payload_bytes": PAYLOAD_BYTES,

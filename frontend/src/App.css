@@ -1797,6 +1797,65 @@
   word-break: break-word;
 }
 
+/* "Why Flagged" per-alert explainability (feature_contributions) — see
+   AlertFeed.jsx and backend/detectors/features.py's feature_contributions(). */
+.feature-contributions__note {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+  margin: 0 0 var(--space-3);
+}
+
+.feature-contributions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+}
+
+.feature-contributions__row {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr 40px minmax(60px, auto);
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.feature-contributions__name {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feature-contributions__bar-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.feature-contributions__bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.feature-contributions__importance {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.feature-contributions__value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  text-align: right;
+  word-break: break-word;
+}
+
 /* ==================================================
    PipelineStatus — live consumer of GET /api/pipeline-status
    (Architecture page "Status" section only; not fabricated telemetry).
@@ -2059,6 +2118,14 @@
   margin: 0;
 }
 
+.correlation-incident__adaptive-note {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-strong);
+}
+
 .correlation-incident-list {
   display: flex;
   flex-direction: column;
@@ -2155,6 +2222,65 @@
   margin-top: var(--space-3);
   font-size: var(--text-sm);
   color: var(--accent);
+}
+
+/* Forensic chain-of-custody verify panel — see ExportPanel.jsx and
+   backend/forensic_chain.py. */
+.forensic-chain {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.forensic-chain__result {
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  width: 100%;
+}
+
+.forensic-chain__result.is-valid {
+  border-color: var(--status-live);
+  background: color-mix(in srgb, var(--status-live) 10%, var(--bg-inset));
+}
+
+.forensic-chain__result.is-broken {
+  border-color: var(--status-offline);
+  background: color-mix(in srgb, var(--status-offline) 10%, var(--bg-inset));
+}
+
+.forensic-chain__result-icon {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.forensic-chain__result.is-valid .forensic-chain__result-icon {
+  color: var(--status-live);
+}
+
+.forensic-chain__result.is-broken .forensic-chain__result-icon {
+  color: var(--status-offline);
+}
+
+.forensic-chain__result-headline {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.forensic-chain__result-detail {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .export-report {

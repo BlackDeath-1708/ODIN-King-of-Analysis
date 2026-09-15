@@ -27,7 +27,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .base import Detector
-from .features import shannon_entropy, interval_stats
+from .features import shannon_entropy, interval_stats, feature_contributions
 
 WINDOW_SECONDS = 60
 ALERT_COOLDOWN = 20   # don't re-alert the same source more than once per this many seconds
@@ -80,6 +80,55 @@ class ReconDetector(Detector):
         }
 
     def process(self, event: dict) -> dict | None:
+        ctx = self._prepare(event)
+        if ctx is None:
+            return None
+        if self.model is not None:
+            vector = [[ctx["feat"][name] for name in FEATURES]]
+            confidence = float(self.model.predict_proba(vector)[0][1])
+            return self._finish(ctx, confidence > 0.5, confidence, self._ml_detection_line(confidence), True)
+        return self._finish(ctx, *self._fallback_decision(ctx["feat"]), False)
+
+    def process_batch(self, events: list) -> list:
+        """See base.Detector.process_batch: per-source window state
+        (self._state) is still updated for every event, in order, via
+        _prepare() -- only the model call is deferred and batched."""
+        results = [None] * len(events)
+        prepared = []  # [(index, ctx), ...]
+        for i, event in enumerate(events):
+            ctx = self._prepare(event)
+            if ctx is not None:
+                prepared.append((i, ctx))
+
+        if not prepared:
+            return results
+
+        if self.model is not None:
+            vectors = [[ctx["feat"][name] for name in FEATURES] for _, ctx in prepared]
+            probas = self.model.predict_proba(vectors)[:, 1]
+            for (i, ctx), p in zip(prepared, probas):
+                confidence = float(p)
+                results[i] = self._finish(ctx, confidence > 0.5, confidence, self._ml_detection_line(confidence), True)
+        else:
+            for i, ctx in prepared:
+                results[i] = self._finish(ctx, *self._fallback_decision(ctx["feat"]), False)
+        return results
+
+    @staticmethod
+    def _ml_detection_line(confidence: float) -> str:
+        return f"ML classifier (RandomForest) flagged this window as reconnaissance (model confidence: {confidence:.0%})"
+
+    @staticmethod
+    def _fallback_decision(feat: dict) -> tuple:
+        triggered = feat["unique_ports"] > PORT_THRESHOLD or feat["unique_hosts"] > HOST_THRESHOLD
+        confidence = 0.6 + min(feat["unique_ports"] / PORT_THRESHOLD * 0.3, 0.35)
+        detection_line = "Detection reason: horizontal/vertical scanning behavior (fixed-threshold rule)"
+        return triggered, confidence, detection_line
+
+    def _prepare(self, event: dict) -> dict | None:
+        """State update (self._state) + feature computation, identical
+        whether reached via process() or process_batch(). Returns None if
+        this event doesn't qualify at all."""
         if event.get("log_type", "conn") != "conn":
             return None
 
@@ -97,29 +146,19 @@ class ReconDetector(Detector):
 
         entries = self._state[src_ip]
         feat = self._features(entries)
+        return {"ts": ts, "src_ip": src_ip, "dst_ip": dst_ip, "dst_port": dst_port,
+                "flow_id": event.get("uid"), "feat": feat}
 
-        used_ml = self.model is not None
-        if used_ml:
-            vector = [[feat[name] for name in FEATURES]]
-            prediction = self.model.predict(vector)[0]
-            confidence = float(self.model.predict_proba(vector)[0][1])
-            triggered = prediction == 1
-            detection_line = (
-                f"ML classifier (RandomForest) flagged this window as reconnaissance "
-                f"(model confidence: {confidence:.0%})"
-            )
-        else:
-            triggered = feat["unique_ports"] > PORT_THRESHOLD or feat["unique_hosts"] > HOST_THRESHOLD
-            confidence = 0.6 + min(feat["unique_ports"] / PORT_THRESHOLD * 0.3, 0.35)
-            detection_line = "Detection reason: horizontal/vertical scanning behavior (fixed-threshold rule)"
-
+    def _finish(self, ctx: dict, triggered: bool, confidence: float, detection_line: str, used_ml: bool):
         if not triggered:
             return None
 
+        ts, src_ip = ctx["ts"], ctx["src_ip"]
         if ts - self._last_alerted.get(src_ip, 0) < ALERT_COOLDOWN:
             return None
         self._last_alerted[src_ip] = ts
 
+        feat = ctx["feat"]
         evidence = [
             detection_line,
             f"Unique destination ports: {feat['unique_ports']}",
@@ -132,8 +171,10 @@ class ReconDetector(Detector):
         severity = "MEDIUM" if feat["unique_ports"] <= PORT_THRESHOLD * 2 else "HIGH"
 
         return self.alert(
-            src_ip=src_ip, src_port=None, dst_ip=dst_ip, dst_port=dst_port,
-            flow_id=event.get("uid"), severity=severity, confidence=confidence,
+            src_ip=src_ip, src_port=None, dst_ip=ctx["dst_ip"], dst_port=ctx["dst_port"],
+            flow_id=ctx["flow_id"], severity=severity, confidence=confidence,
             evidence=evidence, window_seconds=WINDOW_SECONDS, event_ts=ts,
             calibrated=(self.calibrated if used_ml else False),
+            detection_method=("ml" if used_ml else "rule_fallback_no_model"),
+            feature_contributions=(feature_contributions(self.model, FEATURES, feat) if used_ml else None),
         )

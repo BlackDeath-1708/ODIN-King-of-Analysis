@@ -61,6 +61,25 @@ y = df["label"].values
 groups = df["session_id"].values
 n_sessions = df["session_id"].nunique()
 
+# P10 finding (2026-09-14): merging the new multi-host C2 scenarios (22,665
+# new rows, mostly synthetic beacon-emulator traffic) diluted the real CTU-13
+# malware capture's influence enough that recall on it dropped from 0.956 to
+# 0.472 with plain class_weight='balanced' alone (which only balances
+# benign-vs-c2, not real-malware-vs-synthetic-beacon WITHIN the c2 class).
+# Upweighting real_public_dataset rows restores their per-row influence
+# during tree-building without touching class_weight's benign/c2 balance.
+WEIGHT_REAL_MALWARE = 10.0
+sample_weight = np.where(df["source"].values == "real_public_dataset", WEIGHT_REAL_MALWARE, 1.0)
+
+
+def fit_with_weight(model, X_tr, y_tr, w_tr):
+    if isinstance(model, Pipeline):
+        model.fit(X_tr, y_tr, clf__sample_weight=w_tr)
+    else:
+        model.fit(X_tr, y_tr, sample_weight=w_tr)
+    return model
+
+
 print(f"Dataset: {len(df)} rows across {n_sessions} sessions "
       f"({(y==0).sum()} benign rows, {(y==1).sum()} c2 rows)")
 
@@ -121,12 +140,13 @@ confusions = {name: np.zeros((2, 2), dtype=int) for name in MODELS}
 for fold_i, (train_idx, test_idx) in enumerate(gkf.split(X, y, groups)):
     X_train, X_test_fold = X[train_idx], X[test_idx]
     y_train, y_test_fold = y[train_idx], y[test_idx]
+    w_train = sample_weight[train_idx]
 
     for name, model in MODELS.items():
         if model is None:
             y_pred = rule_baseline_predict(X_test_fold)
         else:
-            model.fit(X_train, y_train)
+            fit_with_weight(model, X_train, y_train, w_train)
             y_pred = model.predict(X_test_fold)
         confusions[name] += confusion_matrix(y_test_fold, y_pred, labels=[0, 1])
 
@@ -148,13 +168,38 @@ for name in MODELS:
 
 unique_groups = df["session_id"].unique()
 train_groups, test_groups = train_test_split(unique_groups, test_size=0.2, random_state=42)
+train_groups, test_groups = list(train_groups), list(test_groups)
+
+# P10 finding (2026-09-14): CTU-13 real malware has only 2 captured
+# sessions total. A random group split can put both in train (as happened
+# with the pre-multihost dataset -- making the old "0.956 recall" an
+# in-sample artifact, not genuine held-out generalization) or split them
+# across train/test (as happened after adding multi-host data, revealing
+# ~0% recall on the specific held-out session). Sample-weighting was
+# confirmed NOT to fix this empirically -- no amount of reweighting
+# manufactures generalization to an entirely unseen real-malware flow from
+# a single other example. With only 2 sessions available, deliberately
+# keep both in training rather than leave this to random chance, so the
+# deployed model benefits from every real example available. The pooled
+# 10-fold GroupKFold numbers above (which DO rotate every session,
+# including these two, through a held-out fold at some point across the
+# 10 folds) remain the honest measure of real-malware generalization here,
+# not this single 80/20 split.
+ctu_sessions = set(df[df["source"] == "real_public_dataset"]["session_id"].unique())
+moved = [g for g in test_groups if g in ctu_sessions]
+if moved:
+    print(f"\n[real-malware handling] Moving {len(moved)} real-malware session(s) from "
+          f"test to train (only {len(ctu_sessions)} such session(s) exist total): {moved}")
+    test_groups = [g for g in test_groups if g not in ctu_sessions]
+    train_groups = train_groups + moved
+
 train_mask = df["session_id"].isin(train_groups).values
 test_mask = df["session_id"].isin(test_groups).values
 X_train_final, y_train_final = X[train_mask], y[train_mask]
 X_test, y_test = X[test_mask], y[test_mask]
 
 final_model = RandomForestClassifier(n_estimators=200, max_depth=6, class_weight="balanced", random_state=42)
-final_model.fit(X_train_final, y_train_final)
+final_model.fit(X_train_final, y_train_final, sample_weight=sample_weight[train_mask])
 
 test_preds = final_model.predict(X_test)
 save_metrics(
@@ -165,9 +210,26 @@ save_metrics(
         "2026-09-11 range-extension capture (benign_long/c2_slow sessions). Model trusted "
         "live within observation_count<=20 and mean_interval<=45.0s -- see "
         "backend/detectors/c2.py and ML_MODELS.md for the range-gate rationale. This "
-        "held-out set includes both the original and extended-range sessions."
+        "held-out set includes both the original and extended-range sessions, plus new multi-host "
+        "scenarios (loopback + multi-host combined)."
     ),
 )
+
+# P10/P9: evaluate on the held-out UNSEEN multi-host scenario (c2_multi_05,
+# round-robin multi-destination beaconing) -- see train_recon.py's identical
+# block for the full rationale.
+UNSEEN_DATASET = REPO_ROOT / "training" / "dataset_c2_unseen.csv"
+if UNSEEN_DATASET.exists():
+    udf = pd.read_csv(UNSEEN_DATASET)
+    X_unseen, y_unseen = udf[FEATURES].values, udf["label"].values
+    unseen_preds = final_model.predict(X_unseen)
+    save_metrics(
+        "c2_unseen", y_unseen, unseen_preds,
+        n_train_rows=len(X_train_final), n_test_rows=len(X_unseen),
+        grouping=f"scenario_id (single held-out scenario: {udf['scenario_id'].unique().tolist()})",
+        notes="Generalization check: this scenario never appeared in training, GroupKFold, or "
+              "threshold selection (P9 isolation requirement).",
+    )
 
 fit_groups, cal_groups = train_test_split(train_groups, test_size=0.25, random_state=42)
 fit_mask = df["session_id"].isin(fit_groups).values

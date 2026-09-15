@@ -1,0 +1,23 @@
+# Generic multi-host lab node -- used for attacker/victim/benign roles alike
+# (role is just which container-name/IP a capture script is pointed at, see
+# docker-compose-multihost.yml). Carries the same tools the existing
+# loopback capture scripts already shell out to (nmap in capture_recon.py,
+# hping3 in capture_ddos.py/capture_ddos_udp_spoof.py, curl/ping in
+# capture_exfil.py, python3 sockets in capture_c2.py) so P4's parameterized
+# scripts can run unmodified against a multi-host target instead of 127.0.0.1.
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap \
+    hping3 \
+    python3 \
+    curl \
+    iputils-ping \
+    netcat-traditional \
+    && rm -rf /var/lib/apt/lists/*
+
+# hping3 needs raw-socket capability; granted via cap_add in compose rather
+# than setcap here since the binary's capabilities don't survive being
+# baked into an image layer the same way a host install does.
+
+CMD ["sleep", "infinity"]

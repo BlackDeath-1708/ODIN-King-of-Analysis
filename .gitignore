@@ -19,6 +19,7 @@ training/zeek-logs/
 training/zeek-logs-tls/
 training/zeek-logs-c2ext/
 training/zeek-logs-tls-malicious/
+training/zeek-logs-multihost/
 training/malicious_pcaps_raw/
 
 frontend/build/

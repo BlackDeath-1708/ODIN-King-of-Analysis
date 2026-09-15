@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 1611,
+    "fp": 8,
+    "tn": 2392,
+    "fn": 0
+  },
+  "precision": 0.9951,
+  "recall": 1.0,
+  "f1": 0.9975,
+  "false_positive_rate": 0.0033,
+  "false_negative_rate": 0.0,
+  "accuracy": 0.998,
+  "test_set_size": 4011,
+  "detector": "ddos_unseen",
+  "n_train_rows": 35778,
+  "n_test_rows": 4011,
+  "grouping": "scenario_id (single held-out scenario: ['ddos_multi_04'])",
+  "notes": "Generalization check: this scenario never appeared in training, GroupKFold, or threshold selection (P9 isolation requirement).",
+  "generated_at": "2026-09-14T15:43:35Z"
+}

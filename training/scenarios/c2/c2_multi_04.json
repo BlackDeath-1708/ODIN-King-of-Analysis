@@ -1,0 +1,31 @@
+{
+  "scenario_id": "c2_multi_04",
+  "threat_class": "c2",
+  "is_malicious": true,
+  "attack_subtype": "sleep_burst_beacon",
+  "source": "real",
+  "environment": "docker_multihost",
+  "label_method": "controlled_generation",
+  "generator": "training/capture/capture_c2.py",
+  "capture_id": "c2_multi_04_1789393794",
+  "attacker_ip": "10.10.0.10",
+  "victim_ips": [
+    "10.10.0.20"
+  ],
+  "configuration": {
+    "n_pairs": 65,
+    "base_interval_range_s": [
+      2.0,
+      4.0
+    ],
+    "jitter_pct": 15.0,
+    "beacon_count_range": [
+      10,
+      15
+    ],
+    "pattern": "sleep_burst",
+    "duration_cap": 500.0
+  },
+  "timestamp": "2026-09-14T13:49:54Z",
+  "split": "train"
+}

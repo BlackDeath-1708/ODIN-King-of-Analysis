@@ -1,0 +1,173 @@
+# Multi-host lab for ODIN_Multi_Host_Validation_and_SIH_Demonstration_Plan.md
+# (Phases P1-P8). A separate compose project from docker-compose.yml
+# (loopback) and docker-compose-tls.yml (real egress interface) -- same
+# "explicit name: to prevent cross-teardown" lesson those two files already
+# document, plus these run on a custom bridge instead of network_mode: host,
+# so they're isolated topologically as well as by compose project name.
+#
+# Start with just attacker/victim-1/benign-1 (the P1 "expansion gate" in the
+# plan): bring this up, validate P2 (Zeek sees the bridge)/P2.5 (features
+# extract cleanly)/P3 (network sanity) on the 3-node topology BEFORE
+# uncommenting victim-2/victim-3/benign-2 below. Recon scenarios
+# recon_multi_02/03 are what actually need the extra victims; DDoS/C2/exfil
+# can run against victim-1 alone.
+name: ntro-multihost-lab
+networks:
+  odin_multihost:
+    driver: bridge
+    driver_opts:
+      # Fixed bridge name (instead of Docker's default auto-generated
+      # br-<hash>) so Zeek's -i argument below doesn't need to be looked up
+      # after every `docker compose up`.
+      com.docker.network.bridge.name: br-odinlab
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24
+
+services:
+  attacker:
+    build:
+      context: .
+      dockerfile: Dockerfile.labnode
+    container_name: odin_attacker
+    hostname: attacker
+    cap_add:
+      - NET_RAW   # hping3 (ddos) and nmap SYN-scan modes need this
+      - NET_ADMIN
+    networks:
+      odin_multihost:
+        ipv4_address: 10.10.0.10
+    volumes:
+      # Real bug found 2026-09-14: capture scripts run on the HOST show up
+      # as the bridge gateway (10.10.0.1), not this container's IP
+      # (10.10.0.10) -- --attacker-ip is provenance-only and doesn't change
+      # where traffic actually originates. Every multi-host capture MUST
+      # run via `docker exec odin_attacker python3 /capture/<script>.py ...`,
+      # never directly on the host. Read-write (not :ro): the scripts write
+      # their own sessions_*.json/provenance output back into this same
+      # directory (OUT_DIR = script's own parent dir), landing directly on
+      # the host at training/capture/ and training/scenarios/.
+      - .:/capture
+      - ../scenarios:/scenarios
+    tty: true
+
+  victim-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.labnode
+    container_name: odin_victim_1
+    hostname: victim-1
+    networks:
+      odin_multihost:
+        ipv4_address: 10.10.0.20
+    volumes:
+      # Added for P8 (Phase 8 exfil): victim-1 plays the traffic-SOURCE
+      # role for exfil (plan §10's topology has roles inverted from
+      # ddos/recon/c2 -- the "victim" here is the exfiltrating host), so
+      # it needs the same real-source-not-host-gateway fix the attacker
+      # service already got in P5: run capture_exfil.py --mode client
+      # via `docker exec odin_victim_1 ...`, never from the host directly.
+      - .:/capture
+      - ../scenarios:/scenarios
+    tty: true
+
+  benign-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.labnode
+    container_name: odin_benign_1
+    hostname: benign-1
+    networks:
+      odin_multihost:
+        ipv4_address: 10.10.0.30
+    tty: true
+
+  # --- Expansion (P2/P2.5/P3 passed on the 3-node topology 2026-09-13, see
+  # ODIN_Multi_Host_Task_List.md -- uncommented 2026-09-14 for P5's
+  # recon_multi_02 (3 victims) / recon_multi_03 (4 victims) fan-out) ---
+  victim-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.labnode
+    container_name: odin_victim_2
+    hostname: victim-2
+    networks:
+      odin_multihost:
+        ipv4_address: 10.10.0.21
+    tty: true
+
+  victim-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.labnode
+    container_name: odin_victim_3
+    hostname: victim-3
+    networks:
+      odin_multihost:
+        ipv4_address: 10.10.0.22
+    tty: true
+
+  victim-4:
+    build:
+      context: .
+      dockerfile: Dockerfile.labnode
+    container_name: odin_victim_4
+    hostname: victim-4
+    networks:
+      odin_multihost:
+        ipv4_address: 10.10.0.23
+    tty: true
+
+  # benign-2:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.labnode
+  #   container_name: odin_benign_2
+  #   hostname: benign-2
+  #   networks:
+  #     odin_multihost:
+  #       ipv4_address: 10.10.0.31
+  #   tty: true
+
+  # P8 (Phase 8 exfil, plan §10): victim-1 (10.10.0.20, exfiltrating host)
+  # -> external (10.10.0.40, the "external/server" role) -- roles inverted
+  # from ddos/recon/c2's attacker->victim shape. Needs the same capture
+  # script mount as attacker/victim-1 so `--mode server` can run inside it.
+  external:
+    build:
+      context: .
+      dockerfile: Dockerfile.labnode
+    container_name: odin_external
+    hostname: external
+    networks:
+      odin_multihost:
+        ipv4_address: 10.10.0.40
+    volumes:
+      - .:/capture
+      - ../scenarios:/scenarios
+    tty: true
+
+  zeek_multihost:
+    image: zeek/zeek:latest
+    container_name: zeek_ml_capture_multihost
+    depends_on:
+      - attacker
+      - victim-1
+      - benign-1
+    # Deliberately network_mode: host, NOT attached to odin_multihost --
+    # this is the plan's §4 "Zeek observes the host-side bridge, doesn't
+    # participate in the network being observed" property. Zeek never gets
+    # a 10.10.0.0/24 address and never forwards anything; it only listens
+    # on the host-side br-odinlab interface Docker creates for the network
+    # above.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./zeek-multihost/local.zeek:/usr/local/zeek/share/zeek/site/local.zeek
+      - ../zeek-logs-multihost:/usr/local/zeek/logs/current
+    working_dir: /usr/local/zeek/logs/current
+    command: >
+      zeek -C -i br-odinlab
+      /usr/local/zeek/share/zeek/site/local.zeek

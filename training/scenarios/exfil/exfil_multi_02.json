@@ -1,0 +1,31 @@
+{
+  "scenario_id": "exfil_multi_02",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "dns_low_and_slow",
+  "source": "real",
+  "environment": "docker_multihost",
+  "label_method": "controlled_generation",
+  "generator": "training/capture/capture_exfil.py",
+  "capture_id": "exfil_multi_02_1789397592",
+  "attacker_ip": "10.10.0.20",
+  "victim_ips": [
+    "10.10.0.40"
+  ],
+  "configuration": {
+    "phases": [
+      "benign",
+      "dns"
+    ],
+    "counts": {
+      "benign": 2500,
+      "upload": 600,
+      "icmp": 1200,
+      "dns": 10
+    },
+    "dns_mode": "slow",
+    "caveat": "synthetic low-and-slow approximates evasive exfiltration behavior; it is not a substitute for a real evasive malware corpus"
+  },
+  "timestamp": "2026-09-14T14:53:12Z",
+  "split": "validation"
+}

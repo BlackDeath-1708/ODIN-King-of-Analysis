@@ -1,21 +1,21 @@
 {
   "confusion_matrix": {
-    "tp": 2730,
-    "fp": 2,
-    "tn": 4044,
-    "fn": 11
+    "tp": 3690,
+    "fp": 9,
+    "tn": 4986,
+    "fn": 15
   },
-  "precision": 0.9993,
+  "precision": 0.9976,
   "recall": 0.996,
-  "f1": 0.9976,
-  "false_positive_rate": 0.0005,
+  "f1": 0.9968,
+  "false_positive_rate": 0.0018,
   "false_negative_rate": 0.004,
-  "accuracy": 0.9981,
-  "test_set_size": 6787,
+  "accuracy": 0.9972,
+  "test_set_size": 8700,
   "detector": "ddos",
-  "n_train_rows": 25509,
-  "n_test_rows": 6787,
+  "n_train_rows": 35778,
+  "n_test_rows": 8700,
   "grouping": "session_id",
-  "notes": "Real hping3 SYN/UDP/spoofed-source floods + benign TCP connect() bursts, loopback.",
-  "generated_at": "2026-09-12T18:42:13Z"
+  "notes": "Real hping3 SYN/UDP/spoofed-source floods + benign TCP connect() bursts, loopback + multi-host.",
+  "generated_at": "2026-09-14T15:43:35Z"
 }

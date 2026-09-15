@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 3599,
+    "fp": 7,
+    "tn": 117,
+    "fn": 0
+  },
+  "precision": 0.9981,
+  "recall": 1.0,
+  "f1": 0.999,
+  "false_positive_rate": 0.0565,
+  "false_negative_rate": 0.0,
+  "accuracy": 0.9981,
+  "test_set_size": 3723,
+  "detector": "tls",
+  "n_train_rows": 14508,
+  "n_test_rows": 3723,
+  "grouping": "domain",
+  "notes": "Benign REAL (actual HTTPS/QUIC sessions to ~157 distinct real domains). Malicious class mostly SYNTHETIC (no ethical source for volume malware-over-TLS traffic) plus 22 REAL flows (added 2026-09-13) from a real 2024 Latrodectus/Lumma Stealer infection pcap, matched to analyst-confirmed C2/malicious-infra domains -- see ML_MODELS.md's 'TLS real-malicious-data addition' section.",
+  "generated_at": "2026-09-13T01:37:07Z"
+}

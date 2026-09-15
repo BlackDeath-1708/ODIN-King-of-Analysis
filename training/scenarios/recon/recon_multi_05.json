@@ -1,0 +1,31 @@
+{
+  "scenario_id": "recon_multi_05",
+  "threat_class": "recon",
+  "is_malicious": true,
+  "attack_subtype": "port_scan",
+  "source": "real",
+  "environment": "docker_multihost",
+  "label_method": "controlled_generation",
+  "generator": "training/capture/capture_recon.py",
+  "capture_id": "recon_multi_05_1789359521",
+  "attacker_ip": "10.10.0.10",
+  "victim_ips": [
+    "10.10.0.20"
+  ],
+  "configuration": {
+    "n_pairs": 90,
+    "port_width_range": [
+      50,
+      800
+    ],
+    "port_range_start": null,
+    "rate_range": [
+      200,
+      500
+    ],
+    "scan_pattern": "steady",
+    "duration_cap": 600.0
+  },
+  "timestamp": "2026-09-14T04:18:41Z",
+  "split": "train"
+}

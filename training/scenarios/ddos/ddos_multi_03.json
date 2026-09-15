@@ -1,0 +1,31 @@
+{
+  "scenario_id": "ddos_multi_03",
+  "threat_class": "ddos",
+  "is_malicious": true,
+  "attack_subtype": "udp_flood",
+  "source": "real",
+  "environment": "docker_multihost",
+  "label_method": "controlled_generation",
+  "generator": "training/capture/capture_ddos_udp_spoof.py",
+  "capture_id": "ddos_multi_03_1789389372",
+  "attacker_ip": "10.10.0.10",
+  "victim_ips": [
+    "10.10.0.20"
+  ],
+  "configuration": {
+    "n_pairs": 40,
+    "variant": "udp_only",
+    "rate_range_pps": [
+      10,
+      300
+    ],
+    "reflection_ports": [
+      53,
+      123
+    ],
+    "spoofed_ports": null,
+    "duration_cap": 600.0
+  },
+  "timestamp": "2026-09-14T12:36:12Z",
+  "split": "train"
+}

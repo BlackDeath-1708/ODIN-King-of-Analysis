@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 1894,
+    "fp": 0,
+    "tn": 1737,
+    "fn": 1
+  },
+  "precision": 1.0,
+  "recall": 0.9995,
+  "f1": 0.9997,
+  "false_positive_rate": 0.0,
+  "false_negative_rate": 0.0005,
+  "accuracy": 0.9997,
+  "test_set_size": 3632,
+  "detector": "recon_unseen",
+  "n_train_rows": 33561,
+  "n_test_rows": 3632,
+  "grouping": "scenario_id (single held-out scenario: ['recon_multi_07'])",
+  "notes": "Generalization check: this scenario never appeared in training, GroupKFold, or threshold selection (P9 isolation requirement).",
+  "generated_at": "2026-09-14T15:42:47Z"
+}

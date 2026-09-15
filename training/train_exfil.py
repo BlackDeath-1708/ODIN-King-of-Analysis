@@ -81,9 +81,26 @@ def main():
         n_train_rows=len(X_train), n_test_rows=len(X_test), grouping="group (unique per row)",
         notes=(
             "Majority REAL: real asymmetric HTTP transfers, real ICMP pings, real UDP bursts "
-            "to real public DNS resolvers, topped up with synthetic rows for class balance."
+            "to real public DNS resolvers, topped up with synthetic rows for class balance, "
+            "plus new multi-host scenarios (loopback + multi-host combined)."
         ),
     )
+
+    # P10/P9: evaluate on the held-out UNSEEN multi-host scenario
+    # (exfil_multi_03, ICMP covert) -- see train_recon.py's identical block
+    # for the full rationale.
+    UNSEEN_DATASET = REPO_ROOT / "training" / "dataset_exfil_unseen.csv"
+    if UNSEEN_DATASET.exists():
+        udf = pd.read_csv(UNSEEN_DATASET)
+        X_unseen, y_unseen = udf[FEATURES].values, udf["label"].values
+        unseen_preds = final_model.predict(X_unseen)
+        save_metrics(
+            "exfil_unseen", y_unseen, unseen_preds,
+            n_train_rows=len(X_train), n_test_rows=len(X_unseen),
+            grouping=f"scenario_id (single held-out scenario: {udf['scenario_id'].unique().tolist()})",
+            notes="Generalization check: this scenario never appeared in training, GroupKFold, or "
+                  "threshold selection (P9 isolation requirement).",
+        )
 
     fit_groups, cal_groups = train_test_split(train_groups, test_size=0.25, random_state=42)
     fit_mask = df["group"].isin(fit_groups).values

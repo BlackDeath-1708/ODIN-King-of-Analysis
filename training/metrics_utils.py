@@ -83,10 +83,16 @@ def save_metrics(
     n_test_rows: int,
     grouping: str,
     notes: str = "",
+    extra: dict | None = None,
 ) -> dict:
     """Computes metrics for the final (deployed) model's held-out
     predictions and writes docs/metrics/<detector>.json. Returns the dict
-    that was written, so callers can also print it."""
+    that was written, so callers can also print it.
+
+    `extra`: additional detector-specific fields merged into the written
+    JSON (e.g. train_tier2.py's per-provenance real-vs-synthetic recall
+    breakdown, or a chosen decision threshold) -- kept out of every other
+    caller's way since it's optional and additive only."""
     metrics = compute_metrics(y_true, y_pred)
     metrics.update({
         "detector": detector,
@@ -96,6 +102,8 @@ def save_metrics(
         "notes": notes,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     })
+    if extra:
+        metrics.update(extra)
 
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = METRICS_DIR / f"{detector}.json"

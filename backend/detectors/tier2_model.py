@@ -68,11 +68,23 @@ class Tier2Model:
     `calibrated=False`.
     """
 
-    def __init__(self, net, a: float = 1.0, b: float = 0.0, calibrated: bool = False):
+    # Matches tls_malware.py's Tier-1 threshold -- the safe default whenever
+    # a calibration file predates the per-tier2 threshold sweep
+    # (train_tier2.py) and has no "threshold" key of its own yet.
+    DEFAULT_THRESHOLD = 0.72
+
+    def __init__(self, net, a: float = 1.0, b: float = 0.0, calibrated: bool = False,
+                 threshold: float = DEFAULT_THRESHOLD):
         self._net = net
         self._a = a
         self._b = b
         self.calibrated = calibrated
+        # A tier2-specific decision threshold (train_tier2.py: max recall
+        # s.t. precision >= 0.95 on a held-out calibration split), since
+        # Tier 2's own error profile on the raw sequence isn't necessarily
+        # best served by reusing Tier 1's threshold verbatim even though
+        # both are on the same calibrated probability scale.
+        self.threshold = threshold
 
     def predict(self, sizes: list, gaps: list):
         import torch
@@ -111,7 +123,8 @@ def load_tier2_model(path: Path = MODEL_PATH, calibration_path: Path = CALIBRATI
 
     try:
         cal = np.load(calibration_path)
-        return Tier2Model(net, a=float(cal["a"]), b=float(cal["b"]), calibrated=True)
+        threshold = float(cal["threshold"]) if "threshold" in cal.files else Tier2Model.DEFAULT_THRESHOLD
+        return Tier2Model(net, a=float(cal["a"]), b=float(cal["b"]), calibrated=True, threshold=threshold)
     except Exception as e:
         # Unlike Tier 1 (whose raw RandomForest score is still on a
         # meaningful 0-1 scale even without calibration), Tier 2's raw

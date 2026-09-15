@@ -101,10 +101,16 @@ detectors/{ddos,recon,c2,dga,tls_malware,exfil}.py
         │
         ▼
 correlation/correlator.py  — watches the alert stream itself for four
-                              cross-threat patterns (e.g. recon+c2+exfil
-                              within 600s of event time); a match emits a
-                              second, separate MULTI_VECTOR alert alongside
-                              — never instead of — the individual alerts
+                              curated cross-threat patterns (e.g.
+                              recon+c2+exfil within 600s of event time),
+                              THEN an adaptive statistical layer that flags
+                              any other >=2-class combination that's
+                              statistically surprising given this
+                              deployment's own observed per-class alert
+                              rates (baseline.py); a match emits a second,
+                              separate MULTI_VECTOR / MULTI_VECTOR_ANOMALY
+                              alert alongside — never instead of — the
+                              individual alerts
         │
         ▼
 alerts.json   — one JSON object per line, appended by stream_consumer.py
@@ -368,8 +374,8 @@ trustworthy than raw model output:
   `word_boundary_score()` greedily decomposes a domain's leftmost label
   against a 73,445-word English wordlist; a high score routes the alert's
   `detection_path` evidence to `DICT_DGA` instead of `RANDOM_DGA`.
-- **Cross-threat correlation / kill-chain detection.**
-  `correlation/correlator.py` watches the alert stream for four
+- **Cross-threat correlation / kill-chain detection, two layers.**
+  `correlation/correlator.py` watches the alert stream for four curated
   multi-stage patterns (KILL_CHAIN, C2_EXFIL, DGA_C2, RECON_DDOS) and
   emits a `MULTI_VECTOR` alert when one completes, without suppressing the
   individual alerts. Windows key off each alert's underlying event
@@ -379,7 +385,21 @@ trustworthy than raw model output:
   trivially "look" satisfied regardless of how far apart the events
   actually were. Dedup tracks which specific alerts (by `flow_id`)
   contributed to a pattern's last firing, so a second, genuinely
-  independent attack chain from the same source isn't silently suppressed
+  independent attack chain from the same source isn't silently suppressed.
+  **Underneath that, an adaptive statistical layer** (`correlation/baseline.py`)
+  catches multi-vector combinations nobody named above: it tracks how
+  often each threat class fires on its own (an exponentially-weighted
+  Poisson rate per class) and flags any other >=2-class combination from
+  one source whose co-occurrence would be <~5% likely by chance given
+  those background rates, emitting a `MULTI_VECTOR_ANOMALY` alert with
+  the surprise score and per-class baseline probabilities as evidence.
+  Self-calibrates from this deployment's own traffic rather than a fixed
+  list — no labeled multi-stage-attack corpus exists to train a learned
+  model on (`training/scenarios/` only has single-threat-class captures),
+  so this is deliberately a statistical, explainable layer, not a black
+  box. See `tests/test_correlation_baseline.py` for the false-positive
+  control (individually-frequent classes never get flagged) and the
+  genuine-detection case (individually-rare classes co-occurring do)
   by a naive time-based cooldown — an issue found and fixed during review.
 - **C2 range-gating** — not a new feature so much as the detector's core
   honesty story: the model is trusted only within the input range its
@@ -550,22 +570,33 @@ the dashboard is opened on `localhost` or from another device on the LAN.
 ## 11. Throughput benchmark
 
 `scripts/benchmark_throughput.py` measures the detection pipeline's own
-processing throughput — **not** a full Kafka-broker round-trip. No live
-Kafka broker was running in the environment this was measured in (port
-9092 unreachable, no container up), so rather than fake or skip the
-number, this measures the same `for event: for detector: detector.process
-(event)` loop `stream_consumer.py` runs, fed a synthetic 10,000-event
-stream, with no broker in between.
+processing throughput in isolation — **not** a full Kafka-broker
+round-trip (see below for that). It runs the same
+`for event: for detector: detector.process(event)` loop `stream_consumer.py`
+used to run, fed a synthetic 10,000-event stream, with no broker in
+between.
+
+**Sustained throughput was dominated by scikit-learn's per-call inference
+overhead, not by this codebase's own Python logic** (~12ms/call for a
+RandomForest `predict()`+`predict_proba()` pair, scikit-learn 1.9.0), and
+`ddos.py`/`recon.py`/`c2.py` each made that pair of calls per qualifying
+conn event — the original measured result was 44.8 sustained flows/sec.
+Two fixes closed most of that gap: (1) the redundant `predict()` call was
+eliminated entirely (`predict_proba()`'s own argmax already implies it),
+and (2) every detector now exposes a `process_batch()` that scores a
+whole buffer of events with **one** `predict_proba()` call instead of one
+per event — `stream_consumer.py` buffers incoming events via
+`consumer.poll(timeout_ms=100, max_records=64)` and dispatches per
+64-event batch, keeping per-alert latency far inside the PS's "bounded
+latency" requirement. `tests/test_batch_inference.py` is the correctness
+guarantee: it asserts `process_batch()` produces byte-identical alerts to
+calling `process()` once per event, for every ML-scoring detector.
 
 **Measured result (12th Gen Intel Core i7-1255U, 12 logical cores):
-44.8 sustained flows/sec** (10,000 synthetic events, 223.3s, 1,481 alerts
-produced). That number is deliberately unglamorous, and the reason why is
-the actual finding, not a caveat to bury: sustained throughput here is
-dominated by scikit-learn's per-call inference overhead, not by this
-codebase's own Python logic. Isolated measurement: a single RandomForest
-`predict()` + `predict_proba()` pair costs ~12ms/call in this environment
-(scikit-learn 1.9.0), and `ddos.py`/`recon.py`/`c2.py` each make that pair
-of calls per qualifying conn event.
+71.3 → 337.8 sustained flows/sec, a 4.74x speedup, identical 1,491 alerts
+produced either way** (10,000 synthetic events). See
+`docs/benchmark_results.json`'s `per_event`/`batched`/`batching_speedup_x`
+fields for the full before/after.
 
 | Detector | Attack sequence | Median latency, verified to actually fire |
 |---|---|---|
@@ -594,6 +625,19 @@ was and wasn't measured (e.g. why the sustained-throughput pass's
 timestamp spacing isn't flood-dense).
 
 Run it yourself: `python scripts/benchmark_throughput.py`
+
+**Real Kafka-broker-inclusive E2E benchmark.** `scripts/benchmark_e2e.py`
+generates real network load against the *live* pipeline (Zeek `-i lo`
+capture → Kafka → `stream_consumer.py` → detectors → `alerts.json`) and
+measures what the full stack sustained, not an isolated Python loop. With
+the batched dispatch above and a real Kafka broker running, three runs
+sustained a peak of 83–292 events/sec against a ~297 events/sec offered
+load — noisier than the isolated benchmark because it shares this laptop's
+12 cores with 10 concurrent Docker containers, but a real, multi-fold
+improvement over the pre-batching E2E baseline (peak 22.2/avg 21.47
+events/sec). See `docs/benchmark_e2e_results.json`'s
+`run_to_run_variance_note` for the full, unfiltered before/after and why
+the numbers vary run to run on shared hardware.
 
 ---
 
@@ -727,15 +771,14 @@ larger real-traffic retraining run entirely inside `training/` — see
   specifically for it. All four found and fixed by generating and
   replaying real attack tool traffic, not by code review alone. See
   `ML_MODELS.md`.
-- **The throughput benchmark measures Python processing, not Kafka.** No
-  live broker was available when it was run — see §11.
-- **scikit-learn's per-call inference overhead is the actual bottleneck** —
-  measured 44.8 sustained flows/sec on a 12-core laptop CPU (~12ms per
-  `predict()`+`predict_proba()` pair). That number reflects this Python
-  prototype's own inference cost, not Kafka's or Zeek's — a real
-  engineering constraint worth knowing before assuming any throughput
-  number here scales to production traffic volumes without further
-  optimization (batched inference, a faster serving runtime, etc.).
+- **scikit-learn's per-call inference overhead was the dominant
+  bottleneck** (~12ms per `predict()`+`predict_proba()` pair) — fixed via
+  micro-batched dispatch (§11): 4.74x measured speedup in isolation, a
+  real multi-fold gain in the live Kafka-broker-inclusive benchmark too,
+  though that number is noisier on this shared, multi-container laptop
+  (see `docs/benchmark_e2e_results.json`'s variance note). A faster
+  serving runtime (ONNX Runtime, ensemble pruning) remains a further,
+  unexplored lever if production traffic volumes demand it.
 - **Single-host validation** for the three real-traffic models. All ML
   training/validation traffic ran against loopback (`127.0.0.1`) with one
   generator per class (real rate-limited `hping3` SYN floods for DDoS,

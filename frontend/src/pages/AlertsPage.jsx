@@ -15,6 +15,7 @@ const THREAT_FILTERS = [
   { value: 'tls', label: 'TLS', accent: 'var(--threat-tls)' },
   { value: 'exfil', label: 'Exfil', accent: 'var(--threat-exfil)' },
   { value: 'MULTI_VECTOR', label: 'Multi-Vector', accent: 'var(--threat-multi-vector)' },
+  { value: 'MULTI_VECTOR_ANOMALY', label: 'Multi-Vector Anomaly', accent: 'var(--threat-multi-vector)' },
 ]
 
 // Keyed by the backend's actual severity strings — never numeric, never guessed.

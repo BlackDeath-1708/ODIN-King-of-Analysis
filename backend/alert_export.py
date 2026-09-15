@@ -37,6 +37,11 @@ _STIX_LABELS = {
                                              # matching app.py's get_stats() precedent of
                                              # treating MULTI_VECTOR as its own key, not
                                              # normalized to the other six's lowercase.
+    "MULTI_VECTOR_ANOMALY": "multi-vector-attack",  # correlator.py's adaptive statistical
+                                             # layer (ODIN plan Phase C) -- same STIX label as
+                                             # the curated MULTI_VECTOR pattern; `threat_class`
+                                             # itself (also included in "labels" below) is what
+                                             # distinguishes curated vs. adaptive downstream.
 }
 
 _CEF_SEVERITY = {"CRITICAL": 9, "HIGH": 7, "MEDIUM": 4}

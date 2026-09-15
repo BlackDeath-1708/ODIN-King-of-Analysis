@@ -16,8 +16,9 @@ const THREAT_ACCENTS = {
   tls: 'var(--threat-tls)',
   exfil: 'var(--threat-exfil)',
   MULTI_VECTOR: 'var(--threat-multi-vector)',
+  MULTI_VECTOR_ANOMALY: 'var(--threat-multi-vector)',
 }
-const THREAT_ORDER = ['ddos', 'recon', 'c2', 'dga', 'tls', 'exfil', 'MULTI_VECTOR']
+const THREAT_ORDER = ['ddos', 'recon', 'c2', 'dga', 'tls', 'exfil', 'MULTI_VECTOR', 'MULTI_VECTOR_ANOMALY']
 
 function bucketize(alerts) {
   const timed = alerts

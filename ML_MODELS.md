@@ -1410,6 +1410,162 @@ different model (a small neural net) trained on the same underlying
 flows -- each needs its own verification against real held-out examples,
 not just a headline F1 number.
 
+## TLS Tier-2 evaluation/threshold fix (2026-09-15)
+
+The previously-reported `docs/metrics/tls_tier2.json` (precision=1.0,
+recall=0.520, F1=0.684) was misleading, though not maliciously so: it
+evaluated the model's **raw, uncalibrated sigmoid at a hardcoded 0.5
+threshold** -- a number nothing in production ever applies. `tls_malware.py`
+actually compares Tier 2's *Platt-calibrated* proba against a threshold
+(previously always Tier 1's shared 0.72), so the reported metric and the
+served behavior were measuring two different operating points on the
+model's own score distribution.
+
+Three real, independently-verified fixes, in the order they were found:
+
+1. **Evaluate at the real deployed operating point.** `train_tier2.py` now
+   computes the same `sigmoid(a*raw_logit + b)` transform `tier2_model.py`
+   serves, and evaluates/reports metrics against that, not the raw sigmoid.
+2. **Fixed the training seed.** `main()` had no `torch.manual_seed()` --
+   two back-to-back runs on the *identical* data split produced
+   meaningfully different net weights and, downstream, different chosen
+   thresholds (0.72 vs 0.91) with recall swinging accordingly. This was
+   caught directly: an initial diagnostic run (unseeded) showed 98.8%
+   recall at threshold 0.72, which looked like a dramatic fix -- reran with
+   a fixed seed and got 52% recall at a very different threshold (0.94),
+   proving the first result was random-init luck, not a real finding.
+   `torch.manual_seed(42)` makes this script's output reproducible run to
+   run, which matters more here than usual given the malicious class is
+   still mostly synthetic (13 real rows, see the section above).
+3. **Picked a threshold based on the actual precision/recall curve, not a
+   guessed floor.** `train_tier2.py` sweeps a tier2-specific decision
+   threshold on a held-out calibration split (`_select_threshold()`,
+   max recall subject to a precision floor), saved into
+   `tls_tier2_calibration.npz` and consulted by `tier2_model.py`/
+   `tls_malware.py` instead of reusing Tier 1's 0.72 for Tier-2-driven
+   decisions. Plotting the seeded model's real curve showed a sharp cliff,
+   not a smooth tradeoff: recall is a full 100% at threshold ~0.7-0.8
+   (precision ~91-92%), then collapses to ~52% once the threshold is
+   pushed past ~0.9 chasing precision into the high 90s/100%. A 0.95
+   precision floor lands past that cliff for a marginal precision gain
+   that -- since Tier 2 only ever runs on the ~10% ambiguous slice Tier 1
+   already narrowed down to -- means a handful of extra reviewable alerts,
+   not a flood. Used a 0.90 floor instead (still a strict bar for a
+   security detector), landing on the right side of the cliff.
+
+**Result, fully reproducible (seed=42):** `docs/metrics/tls_tier2.json` now
+reports precision=0.9484, recall=0.9563, F1=0.9523 (up from F1=0.684) at
+decision_threshold=0.51 on the calibrated scale. This is a genuine
+improvement from fixing three real bugs, not a cherry-picked run -- see
+`tests/test_tier2_threshold.py` for the unit-tested threshold-selection
+logic and `tests/test_batch_inference.py::test_tls_batch_matches_sequential`
+for confirmation this didn't interact badly with the Phase A1 batching
+change. `provenance_recall` in the metrics file still shows 0 held-out real-
+malicious rows (n=13 total, all landed in train this split -- an honest
+artifact of n=13, not a bug, same as the section above) -- this fix
+improves confidence in the synthetic-malicious-class recall specifically;
+real-malicious generalization remains the same open, disclosed gap it was
+before.
+
+## Adaptive statistical correlation layer (2026-09-15)
+
+`correlation/correlator.py`'s 4 named patterns (KILL_CHAIN, C2_EXFIL,
+DGA_C2, RECON_DDOS) are real but not adaptive -- any multi-stage attack
+shape outside those exact combinations went uncorrelated. Closing this
+without a labeled multi-stage-attack corpus (none exists here --
+`training/scenarios/` only has single-threat-class captures) meant a
+statistical approach, not a learned one.
+
+**New `correlation/baseline.py`, `AlertRateBaseline`:** tracks each
+threat_class's own alert rate as an exponentially-weighted Poisson
+process (mean inter-arrival gap -> `1 - exp(-rate*window)` = probability
+of seeing >=1 alert of that class in a window). A class with fewer than 3
+observed samples defaults to "not rare" (probability 1.0) rather than
+guessing a rate -- a cold-start class can never itself manufacture an
+anomaly. The correlation window itself is now adaptive too: 3x the
+observed global mean inter-alert gap, clamped to [60s, 900s], instead of
+a magic-number window mismatched to how fast this deployment's traffic
+actually moves.
+
+**`CorrelationEngine.ingest()`:** after the 4 named patterns find no
+match (unchanged, still checked first, still win), a new
+`_check_adaptive_anomaly()` computes a joint surprise score across every
+distinct threat_class present at that source within the adaptive window:
+`-sum(log(P(class in window)))` for each class's own baseline
+probability. Above 3.0 (`exp(-3) ~= 0.05` -- a conventional 5%
+significance cutoff, not an arbitrarily tuned number), it emits a new
+`MULTI_VECTOR_ANOMALY` alert -- same envelope as `MULTI_VECTOR`, evidence
+carrying `classes`, `surprise_score`, and `baseline_probabilities` so the
+"why" is inspectable, not a black box. Same per-combination dedup
+discipline as the named patterns (only suppress when nothing new
+contributed).
+
+**A real bug caught while wiring the frontend, not by the backend tests:**
+`CorrelationPage.jsx` filtered strictly on `threat_class === 'MULTI_VECTOR'`,
+and `AlertFeed.jsx`/`AlertsTimeline.jsx`/`NetworkFlowMap.jsx`/`AlertsPage.jsx`
+all had hardcoded threat-class maps keyed on the same literal -- every one
+of them would have silently never shown a `MULTI_VECTOR_ANOMALY` alert
+anywhere in the dashboard. Also found in `backend/app.py`'s `/api/stats`
+(a hardcoded dict with an `if tc in stats` guard silently drops any
+unlisted class) and `alert_export.py`'s STIX label map (had a safe
+`.get()` fallback, so not a crash, just a less specific exported label).
+All five frontend files plus both backend spots now handle the new class
+explicitly.
+
+**Tests** (`tests/test_correlation_baseline.py`): false-positive control
+(two classes that each fire every ~16s co-occurring is NOT flagged --
+that's ordinary background tempo, not surprising), genuine detection (two
+classes that each fire only every ~400s, kept rare behind a busy 60s-floor
+background from a third class, DO get flagged when they co-occur at one
+source), a regression check that the 4 named patterns still take priority
+and still emit `MULTI_VECTOR` (not shadowed by the new layer), and a
+cold-start check (brand-new classes never manufacture an anomaly from
+ignorance alone). All 4 passed on first run against the hand-derived
+math -- see the test file's own docstrings for the numbers.
+
+## Micro-batched inference (2026-09-15)
+
+`scripts/benchmark_throughput.py`'s own `bottleneck_finding` named the
+cause plainly: scikit-learn's per-call `predict_proba()` overhead
+(~12ms/call) dominated sustained throughput, paid once per event. Two
+fixes:
+
+1. **Eliminated a redundant model call.** `ddos.py`, `c2.py`, and
+   `recon.py` each called both `.predict()` *and* `.predict_proba()` per
+   event -- two scikit-learn calls to make one binary decision, when
+   `predict_proba()[:, 1] > 0.5` already reproduces `.predict()`'s own
+   argmax exactly for a binary classifier. Removed the `.predict()` call
+   entirely.
+2. **Batched every remaining model call.** `Detector.process_batch()`
+   (new, `backend/detectors/base.py`) scores a whole buffer of events with
+   one `predict_proba()` call instead of one per event.
+   `stream_consumer.py` now buffers incoming Kafka messages via
+   `consumer.poll(timeout_ms=100, max_records=64)` before dispatching a
+   batch to each detector -- 100ms keeps per-alert latency far inside PS
+   26145's "bounded latency, not an end-of-run report" requirement.
+
+Each detector's refactor (`_prepare()` for per-event state updates +
+gating, `_finish()` for the post-scoring decision) keeps `process()` and
+`process_batch()` sharing the exact same logic, differing only in whether
+the model is called once or once-per-batch. One real bug was caught and
+fixed *by* the correctness test for this change
+(`tests/test_batch_inference.py`, which asserts `process_batch()` produces
+byte-identical alerts to sequential `process()` calls): `c2.py`'s `_prepare()`
+initially stored `ctx["observations"]` as a reference to the live,
+still-growing `self._connections[key]` list rather than a snapshot count --
+by the time a deferred batch `_finish()` ran, later same-key events in the
+batch had already mutated it, corrupting both the evidence text and the
+feature vector fed to the model for earlier events sharing that key. Fixed
+by snapshotting `len(observations)` into an immutable `ctx["observation_count"]`
+at prepare-time.
+
+**Result, verified via `scripts/benchmark_throughput.py`
+(identical alert counts, batched vs. sequential):** 71.3 → 337.8 sustained
+flows/sec, a 4.74x speedup, on the same 10,000-event synthetic stream and
+the same 12-core laptop. See `docs/benchmark_results.json`'s
+`per_event`/`batched`/`batching_speedup_x` fields, and the section below
+for the live, Kafka-broker-inclusive measurement.
+
 ## Real E2E throughput benchmark, and a real correlator bug it found (2026-09-12)
 
 A PS-26145 compliance review flagged the existing benchmark

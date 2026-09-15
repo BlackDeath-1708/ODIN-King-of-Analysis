@@ -19,6 +19,7 @@ const THREAT_ACCENTS = {
   tls: 'var(--threat-tls)',
   exfil: 'var(--threat-exfil)',
   MULTI_VECTOR: 'var(--threat-multi-vector)',
+  MULTI_VECTOR_ANOMALY: 'var(--threat-multi-vector)',
 }
 
 const MAX_SOURCES = 10

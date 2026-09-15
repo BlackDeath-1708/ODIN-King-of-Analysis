@@ -7,6 +7,13 @@
 // is legible without reading the source; it is not fetched from the
 // backend since correlator.py has no endpoint exposing its pattern table,
 // only its resulting alerts.
+//
+// MULTI_VECTOR_ANOMALY alerts (correlator.py:_make_adaptive_anomaly, ODIN
+// plan Phase C) are a second, dynamic incident shape: no fixed `pattern`
+// name, just whichever `classes` combination turned out statistically
+// surprising given this deployment's own observed per-class alert rates
+// (see backend/correlation/baseline.py). Rendered separately below rather
+// than forced into PATTERN_INFO's fixed 4-entry shape.
 
 const PATTERN_INFO = {
   KILL_CHAIN: {
@@ -57,7 +64,12 @@ const SEVERITY_COLORS = {
 
 export function PatternSummaryCards({ incidents }) {
   const counts = {}
+  let adaptiveCount = 0
   for (const alert of incidents) {
+    if (alert.threat_class === 'MULTI_VECTOR_ANOMALY') {
+      adaptiveCount += 1
+      continue
+    }
     const p = alert.evidence?.pattern
     if (p) counts[p] = (counts[p] || 0) + 1
   }
@@ -88,6 +100,20 @@ export function PatternSummaryCards({ incidents }) {
           </p>
         </div>
       ))}
+      <div className="panel correlation-pattern-card">
+        <div className="correlation-pattern-card__header">
+          <span className="correlation-pattern-card__label">Adaptive Anomaly</span>
+          <span className="correlation-pattern-card__count">{adaptiveCount}</span>
+        </div>
+        <p className="correlation-pattern-card__desc">
+          Statistically surprising combinations of 2+ threat classes from one source that no pattern
+          above names — self-calibrated from this deployment&rsquo;s own observed per-class alert
+          rates (backend/correlation/baseline.py), not a fixed list.
+        </p>
+        <p className="correlation-pattern-card__meta">
+          Window: adaptive (60–900s) · Fires when co-occurrence is &lt;~5% likely by chance
+        </p>
+      </div>
     </div>
   )
 }
@@ -103,12 +129,16 @@ function IncidentRow({ incident }) {
   const contributing = incident.evidence?.contributing_alerts || []
   const sorted = [...contributing].sort((a, b) => a.event_ts - b.event_ts)
   const baseTs = sorted.length > 0 ? sorted[0].event_ts : incident.event_ts
+  const isAdaptive = incident.threat_class === 'MULTI_VECTOR_ANOMALY'
   const info = PATTERN_INFO[incident.evidence?.pattern]
+  const label = isAdaptive
+    ? `Adaptive: ${(incident.evidence?.classes || []).join(' + ')}`
+    : info?.label || incident.evidence?.pattern
 
   return (
     <div className="panel correlation-incident">
       <div className="correlation-incident__header">
-        <span className="kill-chain-badge">⚡ {info?.label || incident.evidence?.pattern}</span>
+        <span className="kill-chain-badge">⚡ {label}</span>
         <span className="correlation-incident__src">{incident.src_ip}</span>
         <span className="badge" style={{ color: SEVERITY_COLORS[incident.severity] || 'var(--severity-unknown)' }}>
           {incident.severity}
@@ -133,6 +163,15 @@ function IncidentRow({ incident }) {
           </div>
         ))}
       </div>
+      {isAdaptive && (
+        <p className="correlation-incident__adaptive-note">
+          Surprise score {incident.evidence?.surprise_score} (higher = less likely by chance) · baseline
+          probabilities:{' '}
+          {Object.entries(incident.evidence?.baseline_probabilities || {})
+            .map(([tc, p]) => `${tc} ${Math.round(p * 100)}%`)
+            .join(', ')}
+        </p>
+      )}
     </div>
   )
 }

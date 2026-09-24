@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 3598,
+    "fp": 0,
+    "tn": 1219,
+    "fn": 0
+  },
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "false_positive_rate": 0.0,
+  "false_negative_rate": 0.0,
+  "accuracy": 1.0,
+  "test_set_size": 4817,
+  "detector": "tls",
+  "n_train_rows": 18960,
+  "n_test_rows": 4817,
+  "grouping": "domain",
+  "notes": "Benign REAL (actual HTTPS/QUIC sessions to ~157 distinct real domains). Malicious class SYNTHETIC (no ethical real-malware-traffic source) -- see ML_MODELS.md.",
+  "generated_at": "2026-09-11T07:46:40Z"
+}

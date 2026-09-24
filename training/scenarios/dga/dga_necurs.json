@@ -1,0 +1,21 @@
+{
+  "scenario_id": "dga_necurs",
+  "threat_class": "dga",
+  "is_malicious": true,
+  "attack_subtype": "dga",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/train_dga.py:gen_necurs",
+  "configuration": {
+    "family": "Necurs (published algorithm)"
+  },
+  "expected_behavior": {
+    "entropy": "high",
+    "ngram_score": "low"
+  },
+  "repetitions": 1500,
+  "applies_to_datasets": [
+    "in-memory only -- train_dga.py, not persisted to a CSV"
+  ],
+  "notes": null
+}

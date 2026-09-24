@@ -1,0 +1,29 @@
+{
+  "scenario_id": "c2_slow_beacon",
+  "threat_class": "c2",
+  "is_malicious": true,
+  "attack_subtype": "periodic_beacon",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_c2_extended.py",
+  "configuration": {
+    "base_interval_sec": [
+      8,
+      45
+    ],
+    "jitter_pct": 15,
+    "beacon_count": [
+      6,
+      10
+    ]
+  },
+  "expected_behavior": {
+    "cv": "low",
+    "mean_interval": "> 7.0s (previous blind spot)"
+  },
+  "repetitions": 15,
+  "applies_to_datasets": [
+    "training/dataset_c2.csv"
+  ],
+  "notes": "Range-extension: closes the mean_interval>7.0s blind spot found by stress-testing the original model (93% false-positive rate when extrapolating past its training box)."
+}

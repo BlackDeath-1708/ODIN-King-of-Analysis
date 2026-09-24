@@ -2,7 +2,11 @@
 const NAV_ITEMS = [
   { id: 'overview', label: 'Overview' },
   { id: 'alerts', label: 'Alerts' },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'correlation', label: 'Correlation' },
   { id: 'threat-analysis', label: 'Threat Analysis' },
+  { id: 'model-performance', label: 'Model Performance' },
+  { id: 'export', label: 'Export & Reports' },
   { id: 'architecture', label: 'Architecture' },
 ]
 

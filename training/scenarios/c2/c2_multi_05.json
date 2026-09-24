@@ -1,0 +1,33 @@
+{
+  "scenario_id": "c2_multi_05",
+  "threat_class": "c2",
+  "is_malicious": true,
+  "attack_subtype": "periodic_beacon",
+  "source": "real",
+  "environment": "docker_multihost",
+  "label_method": "controlled_generation",
+  "generator": "training/capture/capture_c2.py",
+  "capture_id": "c2_multi_05_1789395171",
+  "attacker_ip": "10.10.0.10",
+  "victim_ips": [
+    "10.10.0.21",
+    "10.10.0.22",
+    "10.10.0.23"
+  ],
+  "configuration": {
+    "n_pairs": 65,
+    "base_interval_range_s": [
+      3.0,
+      6.0
+    ],
+    "jitter_pct": 15.0,
+    "beacon_count_range": [
+      10,
+      15
+    ],
+    "pattern": "steady",
+    "duration_cap": 500.0
+  },
+  "timestamp": "2026-09-14T14:12:51Z",
+  "split": "unseen_test"
+}

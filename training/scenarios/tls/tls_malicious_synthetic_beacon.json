@@ -1,0 +1,30 @@
+{
+  "scenario_id": "tls_malicious_synthetic_beacon",
+  "threat_class": "tls",
+  "is_malicious": true,
+  "attack_subtype": "tls_c2_beacon",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/build_dataset_tls.py:gen_malicious_rows / _synth_beacon_pktseq",
+  "configuration": {
+    "shape": "small, bursty, tightly-regular exchanges (heartbeat protocol)",
+    "orig_bytes_range": [
+      200,
+      3000
+    ],
+    "protocols": [
+      "ssl",
+      "quic"
+    ]
+  },
+  "expected_behavior": {
+    "pkt_size_std": "low",
+    "pkt_gap_std": "low"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_tls.csv",
+    "training/dataset_tls_seq.npz (synthetic arm)"
+  ],
+  "notes": "No ethical real-world source exists for genuine malware-over-TLS/QUIC traffic -- shaped to reflect published characteristics of TLS-based C2/malware flows."
+}

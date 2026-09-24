@@ -1,0 +1,27 @@
+{
+  "scenario_id": "dga_real_umudga",
+  "threat_class": "dga",
+  "is_malicious": true,
+  "attack_subtype": "dga",
+  "source": "real_public_dataset",
+  "label_method": "dataset_ground_truth",
+  "generator": "scripts/download_umudga_dga.py + training/train_dga.py:gen_real_umudga_dga",
+  "configuration": {
+    "dataset": "UMUDGA (University of Murcia Domain Generation Algorithm Dataset)",
+    "citation": "Zago, Gil Perez & Martinez Perez, Computers & Security, 2020",
+    "doi": "10.17632/y8ph45msv8.1",
+    "license": "MIT",
+    "folders_sampled": 12,
+    "domains_per_folder": 500,
+    "selection": "12 of 37 eligible folders, evenly spaced across the sorted folder-id listing"
+  },
+  "expected_behavior": {
+    "provenance": "real malware DGA code output, not a synthetic re-implementation of a published algorithm's shape",
+    "diversity": "visually confirmed cross-family diversity in the 12 sampled folders -- fixed-length random-alnum, variable-length random-alnum, hex-hash-style, and two distinct dictionary-word-concatenation (Suppobox-like) shapes"
+  },
+  "repetitions": 6000,
+  "applies_to_datasets": [
+    "in-memory only -- train_dga.py, not persisted to a CSV (raw sample cached in training/dga_real_umudga.csv)"
+  ],
+  "notes": "UMUDGA's own file-listing API exposes only opaque per-family folder UUIDs, not the official malware family name -- the dataset's DOI/paper is the authoritative source for the 50-family roster. Each row here carries its real source_folder_id and a purely descriptive shape_hint (see scripts/download_umudga_dga.py), never an asserted family name. Two other candidate real-domain sources were tried and rejected first: Bambenek Consulting's feed requires a manually-issued license even for research use (not a plug-and-fetch download), and Netlab 360's feed's TLS certificate expired Dec 2023 and the host is unreachable from this environment -- both documented in the download script in case either becomes usable again."
+}

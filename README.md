@@ -26,7 +26,7 @@ that must be detected from that passive vantage point alone:
 |---|---|---|---|---|
 | a | Volumetric / protocol DDoS | Flow-level rate + source-IP entropy | `ddos.py` | Real pcaps |
 | b | Botnet C2 beaconing | Periodicity / inter-arrival analysis | `c2.py` | Real pcaps |
-| c | DGA domains / DNS tunnelling | Entropy / n-gram analysis of DNS names | `dga.py` | Synthetic |
+| c | DGA domains / DNS tunnelling | Entropy / n-gram analysis of DNS names | `dga.py` | Synthetic + real (UMUDGA) |
 | d | Malware in encrypted sessions | JA3/JA4 TLS fingerprints, no decryption | `tls_malware.py` | Synthetic |
 | e | Reconnaissance / port scanning | Fan-out patterns from one source | `recon.py` | Real pcaps |
 | f | Data exfiltration | Byte-ratio / flow-volume asymmetry | `exfil.py` | Synthetic |
@@ -38,10 +38,14 @@ training-data provenance: DDoS/C2/recon are trained and cross-validated in
 this repo (`training/`) against real captured traffic (16,000+ rows each,
 generated with PS-named tooling — real rate-limited `hping3` SYN floods,
 real `nmap` scans, a self-built C2 beacon emulator — see `ML_MODELS.md`'s
-"Real-traffic retraining"); DGA/TLS/exfil are trained on synthetic data
-generated in this repo, because no equivalent real-capture validation set
-exists yet for those three classes. Nothing here claims coverage or
-validation it doesn't have — see `ML_MODELS.md` for the full, honest
+"Real-traffic retraining"); TLS/exfil are trained on synthetic data
+generated in this repo for their malicious class, because no equivalent
+real-capture validation set exists yet for those classes; DGA was the same
+until 2026-09-13, when 6,000 real malware-DGA domains (UMUDGA, MIT
+licensed) were added alongside its 9 synthetic generators — see
+`ML_MODELS.md`'s "DGA real-malware-data addition" section. Nothing here
+claims coverage or validation it doesn't have — see `ML_MODELS.md` for the
+full, honest
 per-model numbers, and the Architecture page's Threat Coverage matrix for
 the same breakdown live in the dashboard.
 
@@ -97,10 +101,16 @@ detectors/{ddos,recon,c2,dga,tls_malware,exfil}.py
         │
         ▼
 correlation/correlator.py  — watches the alert stream itself for four
-                              cross-threat patterns (e.g. recon+c2+exfil
-                              within 600s of event time); a match emits a
-                              second, separate MULTI_VECTOR alert alongside
-                              — never instead of — the individual alerts
+                              curated cross-threat patterns (e.g.
+                              recon+c2+exfil within 600s of event time),
+                              THEN an adaptive statistical layer that flags
+                              any other >=2-class combination that's
+                              statistically surprising given this
+                              deployment's own observed per-class alert
+                              rates (baseline.py); a match emits a second,
+                              separate MULTI_VECTOR / MULTI_VECTOR_ANOMALY
+                              alert alongside — never instead of — the
+                              individual alerts
         │
         ▼
 alerts.json   — one JSON object per line, appended by stream_consumer.py
@@ -135,13 +145,14 @@ Apache Flink job later without changing a single line of detection logic.
 | DDoS (SYN/UDP/spoofed) | RandomForest on flow-rate + port/src-IP entropy | `ddos_model_calibrated.joblib` | 1.000 | Yes |
 | Reconnaissance | RandomForest on fan-out (unique ports/hosts) features | `recon_model_v3_calibrated.joblib` | 1.000 | Yes |
 | C2 Beaconing | RandomForest on inter-arrival timing, range-gated | `c2_model_calibrated.joblib` | 0.9994 | Yes |
-| DGA / DNS Tunnelling | RandomForest (entropy/n-gram/word-boundary) + rule-based tunnel path | `dga_model_calibrated.joblib` | 0.99† | Yes |
+| DGA / DNS Tunnelling | RandomForest (entropy/n-gram/word-boundary) + rule-based tunnel path | `dga_model_calibrated.joblib` | 0.9952† | Yes |
 | TLS Malware (JA3) | JA3 blacklist lookup + RandomForest on flow stats | `tls_flow_model_calibrated.joblib` | 1.00‡ | Yes |
 | Data Exfiltration | Rule-based pattern pre-filter + RandomForest on flow-volume | `exfil_model_calibrated.joblib` | 1.00‡ | Yes |
 
-† DGA is synthetic but now reproduces 9 published DGA algorithm families'
+† DGA's 9 synthetic generators reproduce published DGA algorithm families'
 real characteristic shapes (Conficker, Cryptolocker, Suppobox, etc.) rather
-than one generic generator — see `ML_MODELS.md`.
+than one generic generator, now blended with 6,000 REAL malware-DGA domains
+(UMUDGA, MIT licensed, added 2026-09-13) — see `ML_MODELS.md`.
 ‡ TLS/exfil now train on majority-REAL captured traffic (real HTTPS
 requests, real asymmetric transfers/ICMP/DNS) mixed with a synthetic
 top-up for the class with no ethical real-malware source — see
@@ -229,29 +240,44 @@ below.
   a **word-boundary score** — the fraction of a domain decomposable into
   known English words, which separates dictionary-style DGA families
   (e.g. Suppobox) from purely random ones. See §5.
-- **Trained on synthetic data reproducing 9 published DGA algorithm
-  families** (Conficker, Cryptolocker, Zeus GameOver, Necurs, Tinba,
-  Ramnit, Banjori, Suppobox, Matsnu) — 19,000 rows, F1 0.99. See
-  `ML_MODELS.md` for why this is a meaningfully closer match to PS 26145's
-  "DGA samples from published algorithms" methodology than a single
-  generic random-string generator.
+- **Trained on data reproducing 9 published DGA algorithm families**
+  (Conficker, Cryptolocker, Zeus GameOver, Necurs, Tinba, Ramnit, Banjori,
+  Suppobox, Matsnu) **plus 6,000 REAL malware-DGA domains added
+  2026-09-13** from UMUDGA (MIT licensed, DOI 10.17632/y8ph45msv8.1) — the
+  literal output of 12 real malware families' own DGA code, not a
+  re-implementation of their shape. 31,000 rows total, held-out F1 0.9952.
+  See `ML_MODELS.md`'s "DGA real-malware-data addition" section for the
+  sourcing story (including two gated/dead feed alternatives tried first)
+  and why this is a meaningfully closer match to PS 26145's "DGA samples
+  from published algorithms" methodology than a single generic
+  random-string generator.
 
 ### TLS/QUIC Malware (`backend/detectors/tls_malware.py`)
 - **Path A:** JA3 fingerprint lookup against an offline blacklist (97 real
   entries downloaded from sslbl.abuse.ch — the download itself is a one-off
   script, never called at runtime, keeping the one-way constraint intact).
-- **Path A2 (added 2026-09-12):** JA4 blacklist lookup, same shape as Path
-  A. Ships empty — no public JA4 threat-intel feed exists yet (checked
-  directly against sslbl.abuse.ch); the path is wired up and ready for the
-  moment one does. PS 26145 (d)'s "JA3/JA3S or JA4" wording is satisfied by
-  the real, working JA3 path regardless.
+- **Path A2 (added 2026-09-12, populated 2026-09-13):** JA4 blacklist
+  lookup, same shape as Path A. No public JA4 *feed* exists (checked
+  directly against sslbl.abuse.ch and FoxIO's own gated `ja4db.foxio.io`),
+  but JA4 is an open algorithm — 5 real hashes were computed directly from
+  real malware pcaps (Latrodectus/Lumma Stealer 2024, CTU-13 Neris) using
+  FoxIO's official reference tool, used once offline per its own
+  non-commercial license, never vendored into this repo. See
+  `ML_MODELS.md`'s "Closing the last two gaps" section. PS 26145 (d)'s
+  "JA3/JA3S or JA4" wording was already satisfied by the JA3 path alone
+  regardless.
 - **Path B:** RandomForest on flow statistics (byte counts, duration, byte
   ratio, and — added 2026-09-13 — packet-size/timing-sequence summary
   stats plus a protocol indicator, 12 features total) for malware
-  families not in the blacklist. **Trained on 23,777 rows: 5,777 REAL
-  benign flows (5,405 real HTTPS + 372 real QUIC sessions, 157 distinct
-  real domains) + 18,000 synthetic malicious flows**, pooled GroupKFold F1
-  0.9998.
+  families not in the blacklist. **Trained on 18,231 rows: 209 REAL benign
+  flows (194 real HTTPS + 15 real QUIC sessions) + 22 REAL malicious flows
+  (added 2026-09-13, see below) + 18,000 synthetic malicious flows**, F1
+  0.999. Note: the real-benign count has dropped from a previously
+  documented ~5,777 because `training/zeek-logs-tls/` (the underlying
+  capture log directory) currently holds fewer rows than that — a
+  pre-existing staleness in that capture, not something changed by this
+  session's work; re-running `training/capture/capture_tls.py`/
+  `capture_quic.py` would restore more real benign coverage.
 - **Packet-size and timing sequences (PS 26145 (d), added 2026-09-13):**
   `zeek/scripts/pkt_seq.zeek` logs the first ~12 packet sizes and
   inter-arrival gaps per SSL/QUIC connection; summarized as mean/std
@@ -348,8 +374,8 @@ trustworthy than raw model output:
   `word_boundary_score()` greedily decomposes a domain's leftmost label
   against a 73,445-word English wordlist; a high score routes the alert's
   `detection_path` evidence to `DICT_DGA` instead of `RANDOM_DGA`.
-- **Cross-threat correlation / kill-chain detection.**
-  `correlation/correlator.py` watches the alert stream for four
+- **Cross-threat correlation / kill-chain detection, two layers.**
+  `correlation/correlator.py` watches the alert stream for four curated
   multi-stage patterns (KILL_CHAIN, C2_EXFIL, DGA_C2, RECON_DDOS) and
   emits a `MULTI_VECTOR` alert when one completes, without suppressing the
   individual alerts. Windows key off each alert's underlying event
@@ -359,7 +385,21 @@ trustworthy than raw model output:
   trivially "look" satisfied regardless of how far apart the events
   actually were. Dedup tracks which specific alerts (by `flow_id`)
   contributed to a pattern's last firing, so a second, genuinely
-  independent attack chain from the same source isn't silently suppressed
+  independent attack chain from the same source isn't silently suppressed.
+  **Underneath that, an adaptive statistical layer** (`correlation/baseline.py`)
+  catches multi-vector combinations nobody named above: it tracks how
+  often each threat class fires on its own (an exponentially-weighted
+  Poisson rate per class) and flags any other >=2-class combination from
+  one source whose co-occurrence would be <~5% likely by chance given
+  those background rates, emitting a `MULTI_VECTOR_ANOMALY` alert with
+  the surprise score and per-class baseline probabilities as evidence.
+  Self-calibrates from this deployment's own traffic rather than a fixed
+  list — no labeled multi-stage-attack corpus exists to train a learned
+  model on (`training/scenarios/` only has single-threat-class captures),
+  so this is deliberately a statistical, explainable layer, not a black
+  box. See `tests/test_correlation_baseline.py` for the false-positive
+  control (individually-frequent classes never get flagged) and the
+  genuine-detection case (individually-rare classes co-occurring do)
   by a naive time-based cooldown — an issue found and fixed during review.
 - **C2 range-gating** — not a new feature so much as the detector's core
   honesty story: the model is trusted only within the input range its
@@ -530,22 +570,33 @@ the dashboard is opened on `localhost` or from another device on the LAN.
 ## 11. Throughput benchmark
 
 `scripts/benchmark_throughput.py` measures the detection pipeline's own
-processing throughput — **not** a full Kafka-broker round-trip. No live
-Kafka broker was running in the environment this was measured in (port
-9092 unreachable, no container up), so rather than fake or skip the
-number, this measures the same `for event: for detector: detector.process
-(event)` loop `stream_consumer.py` runs, fed a synthetic 10,000-event
-stream, with no broker in between.
+processing throughput in isolation — **not** a full Kafka-broker
+round-trip (see below for that). It runs the same
+`for event: for detector: detector.process(event)` loop `stream_consumer.py`
+used to run, fed a synthetic 10,000-event stream, with no broker in
+between.
+
+**Sustained throughput was dominated by scikit-learn's per-call inference
+overhead, not by this codebase's own Python logic** (~12ms/call for a
+RandomForest `predict()`+`predict_proba()` pair, scikit-learn 1.9.0), and
+`ddos.py`/`recon.py`/`c2.py` each made that pair of calls per qualifying
+conn event — the original measured result was 44.8 sustained flows/sec.
+Two fixes closed most of that gap: (1) the redundant `predict()` call was
+eliminated entirely (`predict_proba()`'s own argmax already implies it),
+and (2) every detector now exposes a `process_batch()` that scores a
+whole buffer of events with **one** `predict_proba()` call instead of one
+per event — `stream_consumer.py` buffers incoming events via
+`consumer.poll(timeout_ms=100, max_records=64)` and dispatches per
+64-event batch, keeping per-alert latency far inside the PS's "bounded
+latency" requirement. `tests/test_batch_inference.py` is the correctness
+guarantee: it asserts `process_batch()` produces byte-identical alerts to
+calling `process()` once per event, for every ML-scoring detector.
 
 **Measured result (12th Gen Intel Core i7-1255U, 12 logical cores):
-44.8 sustained flows/sec** (10,000 synthetic events, 223.3s, 1,481 alerts
-produced). That number is deliberately unglamorous, and the reason why is
-the actual finding, not a caveat to bury: sustained throughput here is
-dominated by scikit-learn's per-call inference overhead, not by this
-codebase's own Python logic. Isolated measurement: a single RandomForest
-`predict()` + `predict_proba()` pair costs ~12ms/call in this environment
-(scikit-learn 1.9.0), and `ddos.py`/`recon.py`/`c2.py` each make that pair
-of calls per qualifying conn event.
+71.3 → 337.8 sustained flows/sec, a 4.74x speedup, identical 1,491 alerts
+produced either way** (10,000 synthetic events). See
+`docs/benchmark_results.json`'s `per_event`/`batched`/`batching_speedup_x`
+fields for the full before/after.
 
 | Detector | Attack sequence | Median latency, verified to actually fire |
 |---|---|---|
@@ -574,6 +625,19 @@ was and wasn't measured (e.g. why the sustained-throughput pass's
 timestamp spacing isn't flood-dense).
 
 Run it yourself: `python scripts/benchmark_throughput.py`
+
+**Real Kafka-broker-inclusive E2E benchmark.** `scripts/benchmark_e2e.py`
+generates real network load against the *live* pipeline (Zeek `-i lo`
+capture → Kafka → `stream_consumer.py` → detectors → `alerts.json`) and
+measures what the full stack sustained, not an isolated Python loop. With
+the batched dispatch above and a real Kafka broker running, three runs
+sustained a peak of 83–292 events/sec against a ~297 events/sec offered
+load — noisier than the isolated benchmark because it shares this laptop's
+12 cores with 10 concurrent Docker containers, but a real, multi-fold
+improvement over the pre-batching E2E baseline (peak 22.2/avg 21.47
+events/sec). See `docs/benchmark_e2e_results.json`'s
+`run_to_run_variance_note` for the full, unfiltered before/after and why
+the numbers vary run to run on shared hardware.
 
 ---
 
@@ -655,13 +719,15 @@ larger real-traffic retraining run entirely inside `training/` — see
 
 ## 13. Honest limitations
 
-- **Only DGA remains fully synthetic.** TLS malware and data exfiltration
-  now train on majority-real captured traffic (see §4); DGA has no ethical
-  real-malware-DGA source, but its generators now reproduce 9 published DGA
-  algorithm families' real characteristic shapes rather than one generic
-  generator. Malicious-class data for TLS/exfil is still synthetic (no
-  ethical real-malware-traffic source exists for either) — see
-  `ML_MODELS.md`.
+- **DGA is now majority-synthetic, not fully synthetic.** TLS malware and
+  data exfiltration train on majority-real captured traffic (see §4); DGA
+  has no ethical way to *run* real malware DGA code itself, but as of
+  2026-09-13 it trains on 6,000 REAL domains (UMUDGA, MIT licensed) that
+  are the literal output of 12 real malware families' own DGA code,
+  alongside the 9 generators that reproduce published DGA algorithm
+  families' shapes rather than one generic generator. Malicious-class data
+  for TLS/exfil is still synthetic (no ethical real-malware-traffic source
+  exists for either) — see `ML_MODELS.md`.
 - **DGA's benign class was found to false-positive on real ambient DNS
   traffic** (this machine's own background queries, not synthetic —
   498/500 alerts in one live session) because the original synthetic
@@ -705,15 +771,14 @@ larger real-traffic retraining run entirely inside `training/` — see
   specifically for it. All four found and fixed by generating and
   replaying real attack tool traffic, not by code review alone. See
   `ML_MODELS.md`.
-- **The throughput benchmark measures Python processing, not Kafka.** No
-  live broker was available when it was run — see §11.
-- **scikit-learn's per-call inference overhead is the actual bottleneck** —
-  measured 44.8 sustained flows/sec on a 12-core laptop CPU (~12ms per
-  `predict()`+`predict_proba()` pair). That number reflects this Python
-  prototype's own inference cost, not Kafka's or Zeek's — a real
-  engineering constraint worth knowing before assuming any throughput
-  number here scales to production traffic volumes without further
-  optimization (batched inference, a faster serving runtime, etc.).
+- **scikit-learn's per-call inference overhead was the dominant
+  bottleneck** (~12ms per `predict()`+`predict_proba()` pair) — fixed via
+  micro-batched dispatch (§11): 4.74x measured speedup in isolation, a
+  real multi-fold gain in the live Kafka-broker-inclusive benchmark too,
+  though that number is noisier on this shared, multi-container laptop
+  (see `docs/benchmark_e2e_results.json`'s variance note). A faster
+  serving runtime (ONNX Runtime, ensemble pruning) remains a further,
+  unexplored lever if production traffic volumes demand it.
 - **Single-host validation** for the three real-traffic models. All ML
   training/validation traffic ran against loopback (`127.0.0.1`) with one
   generator per class (real rate-limited `hping3` SYN floods for DDoS,
@@ -729,13 +794,16 @@ larger real-traffic retraining run entirely inside `training/` — see
   — see `ML_MODELS.md`). A from-scratch DGArchive pull remains untested
   against this specific build (the in-repo DGA generators reproduce 9
   published algorithm families' characteristic shapes instead).
-- **No public JA4 threat-intel feed exists to populate
-  `ja4_blacklist.json`** — checked directly against both sslbl.abuse.ch
-  and FoxIO's `ja4db.foxio.io` (the latter's real database sits behind a
-  signup/auth-gated API, not a public download). The lookup path is real
-  and wired up; it just has nothing to match against yet. JA3 (which does
-  have a real public feed) already satisfies PS 26145 (d)'s
-  "JA3/JA3S or JA4" wording on its own.
+- **No public JA4 threat-intel *feed* exists** — checked directly against
+  both sslbl.abuse.ch and FoxIO's `ja4db.foxio.io` (the latter's real
+  database sits behind a signup/auth-gated API, not a public download).
+  As of 2026-09-13, `ja4_blacklist.json` is no longer empty: 5 real hashes
+  were computed directly from real malware pcaps using FoxIO's own
+  reference tool (used once offline, non-commercially, never vendored into
+  this repo) — see `ML_MODELS.md`. A live feed still doesn't exist, but
+  the blacklist itself is no longer a placeholder. JA3 (which does have a
+  real public feed) already satisfies PS 26145 (d)'s "JA3/JA3S or JA4"
+  wording on its own regardless.
 - **C2's ML model is range-gated**, not universally trusted — see §4 and
   `ML_MODELS.md` for exactly why.
 - **No Apache Flink, no Suricata, no real time-series database.** The

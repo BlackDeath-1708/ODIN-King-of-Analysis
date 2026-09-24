@@ -1,0 +1,28 @@
+{
+  "scenario_id": "c2_benign_long_baseline",
+  "threat_class": "c2",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_c2_extended.py",
+  "configuration": {
+    "duration_sec": [
+      60,
+      100
+    ],
+    "gap_distribution": "expovariate",
+    "mean_gap_sec": [
+      3,
+      6
+    ]
+  },
+  "expected_behavior": {
+    "observation_count": ">= 12 (previous blind spot)"
+  },
+  "repetitions": 15,
+  "applies_to_datasets": [
+    "training/dataset_c2.csv"
+  ],
+  "notes": "Range-extension: closes the observation_count>=12 blind spot (previously only ever seen as C2)."
+}

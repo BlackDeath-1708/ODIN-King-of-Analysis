@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-09-13T00:00:00Z",
+  "git_commit": "96a5409547686dcbadb58672d3e2574cb36583ef",
+  "note": "Row counts exclude CSV header row. dga has no persisted CSV (generated in-memory by train_dga.py); its counts are train/test split sizes from docs/metrics/dga.json instead.",
+  "datasets": {
+    "ddos": {"file": "training/dataset_ddos.csv", "rows": 32296},
+    "c2": {"file": "training/dataset_c2.csv", "rows": 33121},
+    "recon": {"file": "training/dataset_recon.csv", "rows": 17760},
+    "exfil": {"file": "training/dataset_exfil.csv", "rows": 11600},
+    "tls_flow_stats": {"file": "training/dataset_tls.csv", "rows": 18231},
+    "tls_tier2_seq": {"file": "training/dataset_tls_seq.npz", "rows_note": "packed sequence tensors, not a row-per-flow CSV; see docs/metrics/tls_tier2.json for train/test split sizes"},
+    "dga": {"file": null, "rows_note": "in-memory only; 24800 train + 6200 test per docs/metrics/dga.json"}
+  },
+  "combined_persisted_csv_rows": 113008
+}

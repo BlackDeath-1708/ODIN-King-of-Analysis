@@ -1,18 +1,32 @@
 {
-  "measurement_scope": "Python detection-pipeline throughput only (detector.process() calls in a tight loop, matching stream_consumer.py's dispatch loop exactly) -- NOT a Kafka-broker round-trip measurement. No live Kafka broker was running in this environment (port 9092 unreachable) when this benchmark was run; see this script's module docstring for why that number isn't faked here.",
-  "sustained_flows_per_sec": 44.8,
-  "test_event_count": 10000,
-  "elapsed_seconds": 223.3442,
-  "alerts_produced_on_synthetic_stream": 1481,
-  "per_detector_latency_ms": {
-    "ddos": 40.8246,
-    "recon": 81.6176,
-    "c2": 13.6758,
-    "dga": 7.5235,
-    "tls": 4.0562,
-    "exfil": 4.0432
+  "measurement_scope": "Python detection-pipeline throughput only (detector.process()/process_batch() calls in a tight loop, matching stream_consumer.py's dispatch loop exactly) -- NOT a Kafka-broker round-trip measurement (see docs/benchmark_e2e_results.json for that). Two passes: 'per_event' (process() once per event, the original measurement) and 'batched' (process_batch() once per 64-event chunk, matching stream_consumer.py's POLL_MAX_RECORDS -- see ODIN throughput plan Phase A1). Both passes run the identical synthetic event stream against fresh detector instances; tests/test_batch_inference.py is the correctness guarantee that batching doesn't change which alerts fire, only how fast.",
+  "per_event": {
+    "sustained_flows_per_sec": 71.3,
+    "test_event_count": 10000,
+    "elapsed_seconds": 140.259,
+    "alerts_produced_on_synthetic_stream": 1491
   },
-  "bottleneck_finding": "Sustained throughput here is dominated by scikit-learn's per-call inference overhead, not by this codebase's own Python logic: a single RandomForest predict()+predict_proba() pair measured ~12ms/call in this environment (scikit-learn 1.9.0), and ddos.py/recon.py/c2.py each make that pair of calls per qualifying conn event. Verified directly: an unrealistically dense synthetic stream (events spaced ~0.01s apart) made ddos.py's/recon.py's rolling windows grow to thousands of unpruned entries and dominated cost instead -- an artifact of the generator, not a finding about the pipeline -- which is why this benchmark uses 0.5-3.0s spacing (see generate_synthetic_stream's docstring) to isolate the real steady-state bottleneck.",
-  "hardware": "12th Gen Intel Core i7-1255U, 12 logical cores, 14GiB RAM",
-  "timestamp": "2026-09-09T07:20:53Z"
+  "batched": {
+    "sustained_flows_per_sec": 337.8,
+    "batch_size": 64,
+    "test_event_count": 10000,
+    "elapsed_seconds": 29.6028,
+    "alerts_produced_on_synthetic_stream": 1491
+  },
+  "batching_speedup_x": 4.74,
+  "sustained_flows_per_sec": 71.3,
+  "test_event_count": 10000,
+  "elapsed_seconds": 140.259,
+  "alerts_produced_on_synthetic_stream": 1491,
+  "per_detector_latency_ms": {
+    "ddos": 28.3661,
+    "recon": 36.4982,
+    "c2": 17.471,
+    "dga": 18.7751,
+    "tls": 13.558,
+    "exfil": 18.4049
+  },
+  "bottleneck_finding": "Sustained throughput in the per-event pass is dominated by scikit-learn's per-call inference overhead, not by this codebase's own Python logic: a single RandomForest predict()+predict_proba() pair measured ~12ms/call in this environment (scikit-learn 1.9.0), and ddos.py/recon.py/c2.py each made that pair of calls per qualifying conn event. Phase A1 (see ODIN throughput plan) eliminated the redundant predict() call entirely (predict_proba()'s own argmax already implies it) and batches every remaining predict_proba() call across a buffer of events -- see 'batching_speedup_x' above for the measured result, and each detector's process_batch() docstring for how state-mutating order is still preserved exactly. Verified directly: an unrealistically dense synthetic stream (events spaced ~0.01s apart) made ddos.py's/recon.py's rolling windows grow to thousands of unpruned entries and dominated cost instead -- an artifact of the generator, not a finding about the pipeline -- which is why this benchmark uses 0.5-3.0s spacing (see generate_synthetic_stream's docstring) to isolate the real steady-state bottleneck.",
+  "hardware": "<fill manually -- run `lscpu | grep \"Model name\"` and note core count/RAM>",
+  "timestamp": "2026-09-15T07:39:31Z"
 }

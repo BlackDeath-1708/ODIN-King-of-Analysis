@@ -1,0 +1,22 @@
+{
+  "scenario_id": "tls_malicious_real_ctu13_botnet42_neris",
+  "threat_class": "tls",
+  "is_malicious": true,
+  "attack_subtype": "tls_c2",
+  "source": "real_public_dataset",
+  "label_method": "dataset_ground_truth",
+  "generator": "training/build_malicious_pcap_logs.py + training/build_dataset_tls_seq.py",
+  "configuration": {
+    "dataset": "CTU-13",
+    "scenario": "botnet42 (Neris)",
+    "filter": "argus binetflow ground-truth 5-tuples labeled 'Botnet' only"
+  },
+  "expected_behavior": {
+    "provenance": "real malware, not a generator artifact"
+  },
+  "repetitions": 13,
+  "applies_to_datasets": [
+    "training/dataset_tls_seq.npz (real arm ONLY -- NOT used by dataset_tls.csv, which has zero real malicious rows)"
+  ],
+  "notes": "Real ceiling, not a target -- 13 flows is the actual yield from this scenario's ground-truth-labeled Botnet traffic after packet-sequence filtering. This is the one class where 'maximize real coverage' replaces any row-count target."
+}

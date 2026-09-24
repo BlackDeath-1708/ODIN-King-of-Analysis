@@ -1,0 +1,30 @@
+{
+  "scenario_id": "exfil_multi_01",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "high_upload",
+  "source": "real",
+  "environment": "docker_multihost",
+  "label_method": "controlled_generation",
+  "generator": "training/capture/capture_exfil.py",
+  "capture_id": "exfil_multi_01_1789397552",
+  "attacker_ip": "10.10.0.20",
+  "victim_ips": [
+    "10.10.0.40"
+  ],
+  "configuration": {
+    "phases": [
+      "benign",
+      "upload"
+    ],
+    "counts": {
+      "benign": 2500,
+      "upload": 600,
+      "icmp": 1200,
+      "dns": null
+    },
+    "dns_mode": null
+  },
+  "timestamp": "2026-09-14T14:52:32Z",
+  "split": "train"
+}

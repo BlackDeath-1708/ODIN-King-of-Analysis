@@ -1,0 +1,258 @@
+[
+  {
+    "label": "benign_udpspoof_0_start",
+    "ts": 1789389377.490771
+  },
+  {
+    "label": "benign_udpspoof_0_end",
+    "ts": 1789389402.982001
+  },
+  {
+    "label": "ddos_spoofed_0_start",
+    "ts": 1789389402.982038
+  },
+  {
+    "label": "ddos_spoofed_0_end",
+    "ts": 1789389419.1360507
+  },
+  {
+    "label": "benign_udpspoof_1_start",
+    "ts": 1789389419.13617
+  },
+  {
+    "label": "benign_udpspoof_1_end",
+    "ts": 1789389444.4642646
+  },
+  {
+    "label": "ddos_spoofed_1_start",
+    "ts": 1789389444.4642813
+  },
+  {
+    "label": "ddos_spoofed_1_end",
+    "ts": 1789389458.3301225
+  },
+  {
+    "label": "benign_udpspoof_2_start",
+    "ts": 1789389458.3302398
+  },
+  {
+    "label": "benign_udpspoof_2_end",
+    "ts": 1789389478.6314003
+  },
+  {
+    "label": "ddos_spoofed_2_start",
+    "ts": 1789389478.6314378
+  },
+  {
+    "label": "ddos_spoofed_2_end",
+    "ts": 1789389491.1344
+  },
+  {
+    "label": "benign_udpspoof_3_start",
+    "ts": 1789389491.1344385
+  },
+  {
+    "label": "benign_udpspoof_3_end",
+    "ts": 1789389516.3028128
+  },
+  {
+    "label": "ddos_spoofed_3_start",
+    "ts": 1789389516.302833
+  },
+  {
+    "label": "ddos_spoofed_3_end",
+    "ts": 1789389530.122337
+  },
+  {
+    "label": "benign_udpspoof_4_start",
+    "ts": 1789389530.122468
+  },
+  {
+    "label": "benign_udpspoof_4_end",
+    "ts": 1789389553.688024
+  },
+  {
+    "label": "ddos_spoofed_4_start",
+    "ts": 1789389553.6880412
+  },
+  {
+    "label": "ddos_spoofed_4_end",
+    "ts": 1789389568.4944484
+  },
+  {
+    "label": "benign_udpspoof_5_start",
+    "ts": 1789389568.494526
+  },
+  {
+    "label": "benign_udpspoof_5_end",
+    "ts": 1789389591.565157
+  },
+  {
+    "label": "ddos_spoofed_5_start",
+    "ts": 1789389591.565176
+  },
+  {
+    "label": "ddos_spoofed_5_end",
+    "ts": 1789389609.5783443
+  },
+  {
+    "label": "benign_udpspoof_6_start",
+    "ts": 1789389609.5783997
+  },
+  {
+    "label": "benign_udpspoof_6_end",
+    "ts": 1789389627.603499
+  },
+  {
+    "label": "ddos_spoofed_6_start",
+    "ts": 1789389627.6035204
+  },
+  {
+    "label": "ddos_spoofed_6_end",
+    "ts": 1789389637.847727
+  },
+  {
+    "label": "benign_udpspoof_7_start",
+    "ts": 1789389637.8477666
+  },
+  {
+    "label": "benign_udpspoof_7_end",
+    "ts": 1789389665.4672785
+  },
+  {
+    "label": "ddos_spoofed_7_start",
+    "ts": 1789389665.467292
+  },
+  {
+    "label": "ddos_spoofed_7_end",
+    "ts": 1789389687.3375463
+  },
+  {
+    "label": "benign_udpspoof_8_start",
+    "ts": 1789389687.3376453
+  },
+  {
+    "label": "benign_udpspoof_8_end",
+    "ts": 1789389710.4840233
+  },
+  {
+    "label": "ddos_spoofed_8_start",
+    "ts": 1789389710.484048
+  },
+  {
+    "label": "ddos_spoofed_8_end",
+    "ts": 1789389731.6067038
+  },
+  {
+    "label": "benign_udpspoof_9_start",
+    "ts": 1789389731.6067986
+  },
+  {
+    "label": "benign_udpspoof_9_end",
+    "ts": 1789389748.3022006
+  },
+  {
+    "label": "ddos_spoofed_9_start",
+    "ts": 1789389748.3022308
+  },
+  {
+    "label": "ddos_spoofed_9_end",
+    "ts": 1789389760.9544415
+  },
+  {
+    "label": "benign_udpspoof_10_start",
+    "ts": 1789389760.9544735
+  },
+  {
+    "label": "benign_udpspoof_10_end",
+    "ts": 1789389788.3577216
+  },
+  {
+    "label": "ddos_spoofed_10_start",
+    "ts": 1789389788.3577359
+  },
+  {
+    "label": "ddos_spoofed_10_end",
+    "ts": 1789389798.3526149
+  },
+  {
+    "label": "benign_udpspoof_11_start",
+    "ts": 1789389798.352694
+  },
+  {
+    "label": "benign_udpspoof_11_end",
+    "ts": 1789389818.9656036
+  },
+  {
+    "label": "ddos_spoofed_11_start",
+    "ts": 1789389818.9656315
+  },
+  {
+    "label": "ddos_spoofed_11_end",
+    "ts": 1789389831.2094529
+  },
+  {
+    "label": "benign_udpspoof_12_start",
+    "ts": 1789389831.2095506
+  },
+  {
+    "label": "benign_udpspoof_12_end",
+    "ts": 1789389857.592081
+  },
+  {
+    "label": "ddos_spoofed_12_start",
+    "ts": 1789389857.5921154
+  },
+  {
+    "label": "ddos_spoofed_12_end",
+    "ts": 1789389878.8150957
+  },
+  {
+    "label": "benign_udpspoof_13_start",
+    "ts": 1789389878.8151746
+  },
+  {
+    "label": "benign_udpspoof_13_end",
+    "ts": 1789389894.5792587
+  },
+  {
+    "label": "ddos_spoofed_13_start",
+    "ts": 1789389894.5792894
+  },
+  {
+    "label": "ddos_spoofed_13_end",
+    "ts": 1789389908.6955097
+  },
+  {
+    "label": "benign_udpspoof_14_start",
+    "ts": 1789389908.6955903
+  },
+  {
+    "label": "benign_udpspoof_14_end",
+    "ts": 1789389931.3799405
+  },
+  {
+    "label": "ddos_spoofed_14_start",
+    "ts": 1789389931.3799648
+  },
+  {
+    "label": "ddos_spoofed_14_end",
+    "ts": 1789389947.4369495
+  },
+  {
+    "label": "benign_udpspoof_15_start",
+    "ts": 1789389947.4370432
+  },
+  {
+    "label": "benign_udpspoof_15_end",
+    "ts": 1789389965.4089186
+  },
+  {
+    "label": "ddos_spoofed_15_start",
+    "ts": 1789389965.4089463
+  },
+  {
+    "label": "ddos_spoofed_15_end",
+    "ts": 1789389979.215599
+  }
+]

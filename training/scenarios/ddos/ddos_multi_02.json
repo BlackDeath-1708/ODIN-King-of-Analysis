@@ -1,0 +1,28 @@
+{
+  "scenario_id": "ddos_multi_02",
+  "threat_class": "ddos",
+  "is_malicious": true,
+  "attack_subtype": "syn_flood",
+  "source": "real",
+  "environment": "docker_multihost",
+  "label_method": "controlled_generation",
+  "generator": "training/capture/capture_ddos.py",
+  "capture_id": "ddos_multi_02_1789388732",
+  "attacker_ip": "10.10.0.10",
+  "victim_ips": [
+    "10.10.0.20"
+  ],
+  "configuration": {
+    "n_pairs": 65,
+    "rate_range_pps": [
+      10,
+      300
+    ],
+    "flood_duration_range_s": [
+      8,
+      20
+    ]
+  },
+  "timestamp": "2026-09-14T12:25:32Z",
+  "split": "train"
+}

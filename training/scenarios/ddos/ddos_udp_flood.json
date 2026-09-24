@@ -1,0 +1,33 @@
+{
+  "scenario_id": "ddos_udp_flood",
+  "threat_class": "ddos",
+  "is_malicious": true,
+  "attack_subtype": "udp_flood",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_ddos_udp_spoof.py",
+  "configuration": {
+    "tool": "hping3 -2 (direct, no spoofing)",
+    "dst_ports": [
+      53,
+      123
+    ],
+    "target_rate_pps": [
+      10,
+      300
+    ],
+    "duration_sec": [
+      8,
+      20
+    ]
+  },
+  "expected_behavior": {
+    "packet_rate": "high",
+    "protocol": "udp"
+  },
+  "repetitions": 40,
+  "applies_to_datasets": [
+    "training/dataset_ddos.csv"
+  ],
+  "notes": "Targets reflection/amplification-associated ports (DNS 53, NTP 123)."
+}

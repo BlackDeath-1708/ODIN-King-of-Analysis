@@ -20,6 +20,7 @@ import joblib
 from pathlib import Path
 
 from .base import Detector
+from .features import feature_contributions
 
 BASE_MODEL_PATH       = Path(__file__).parent.parent / "ml_models" / "exfil_model.joblib"
 CALIBRATED_MODEL_PATH = Path(__file__).parent.parent / "ml_models" / "exfil_model_calibrated.joblib"
@@ -28,6 +29,12 @@ RFC1918_PREFIXES = ('10.', '172.16.', '172.17.', '172.18.', '172.19.',
                     '172.20.', '172.21.', '172.22.', '172.23.', '172.24.',
                     '172.25.', '172.26.', '172.27.', '172.28.', '172.29.',
                     '172.30.', '172.31.', '192.168.')
+
+# Must match ../../training/train_exfil.py's FEATURES order exactly -- this
+# is only used to label _extract()'s already-ordered `features` list for
+# feature_contributions() (see features.py), not to build the vector itself.
+FEATURES = ["orig_bytes", "resp_bytes", "byte_ratio", "duration",
+            "orig_pkts", "resp_pkts", "bytes_per_sec", "is_icmp", "to_dns", "to_common_port"]
 
 
 class ExfilDetector(Detector):
@@ -89,6 +96,35 @@ class ExfilDetector(Detector):
         return None
 
     def process(self, event: dict) -> dict | None:
+        ctx = self._prepare(event)
+        if ctx is None:
+            return None
+        ml_confidence = float(self.model.predict_proba([ctx["features"]])[0][1])
+        return self._finish(ctx, ml_confidence)
+
+    def process_batch(self, events: list) -> list:
+        """See base.Detector.process_batch. This detector holds no per-event
+        state (no rolling window, no cooldown dict), so there's no ordering
+        subtlety to worry about -- _prepare() is a pure gating+feature-
+        extraction function, safe to run in any order, and only the model
+        call itself is batched."""
+        results = [None] * len(events)
+        prepared = []  # [(index, ctx), ...]
+        for i, event in enumerate(events):
+            ctx = self._prepare(event)
+            if ctx is not None:
+                prepared.append((i, ctx))
+
+        if not prepared:
+            return results
+
+        vectors = [ctx["features"] for _, ctx in prepared]
+        probas = self.model.predict_proba(vectors)[:, 1]
+        for (i, ctx), p in zip(prepared, probas):
+            results[i] = self._finish(ctx, float(p))
+        return results
+
+    def _prepare(self, event: dict) -> dict | None:
         if event.get("log_type", "conn") != "conn":
             return None
         if self.model is None:
@@ -102,8 +138,13 @@ class ExfilDetector(Detector):
 
         features, meta = self._extract(event)
         pattern = self._rule_pattern(meta)
-        ml_confidence = float(self.model.predict_proba([features])[0][1])
+        return {
+            "ts": ts, "src": src, "dst": dst, "dst_port": event.get("dst_port"),
+            "flow_id": event.get("uid"), "features": features, "meta": meta, "pattern": pattern,
+        }
 
+    def _finish(self, ctx: dict, ml_confidence: float):
+        pattern = ctx["pattern"]
         threshold = 0.60 if pattern else 0.80
         if ml_confidence < threshold:
             return None
@@ -111,6 +152,7 @@ class ExfilDetector(Detector):
         confidence_floored = bool(pattern) and ml_confidence < 0.70
         confidence = max(ml_confidence, 0.70) if pattern else ml_confidence
         severity = "CRITICAL" if pattern == "ICMP_COVERT" else ("HIGH" if confidence > 0.85 else "MEDIUM")
+        meta = ctx["meta"]
         evidence = {
             'orig_bytes': meta['orig_bytes'], 'resp_bytes': meta['resp_bytes'],
             'byte_ratio': meta['byte_ratio'], 'duration': meta['duration'],
@@ -118,8 +160,10 @@ class ExfilDetector(Detector):
             'exfil_pattern': pattern or 'ML_ONLY',
         }
         return self.alert(
-            src_ip=src, src_port=None, dst_ip=dst, dst_port=event.get("dst_port"),
-            flow_id=event.get("uid"), severity=severity, confidence=round(confidence, 4),
-            evidence=evidence, window_seconds=0, event_ts=ts,
+            src_ip=ctx["src"], src_port=None, dst_ip=ctx["dst"], dst_port=ctx["dst_port"],
+            flow_id=ctx["flow_id"], severity=severity, confidence=round(confidence, 4),
+            evidence=evidence, window_seconds=0, event_ts=ctx["ts"],
             calibrated=(self.calibrated and not confidence_floored),
+            detection_method=("ml_rule_confirmed" if pattern else "ml_only"),
+            feature_contributions=feature_contributions(self.model, FEATURES, dict(zip(FEATURES, ctx["features"]))),
         )

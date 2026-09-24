@@ -1,0 +1,21 @@
+{
+  "scenario_id": "c2_real_ctu13_sogou48",
+  "threat_class": "c2",
+  "is_malicious": true,
+  "attack_subtype": "periodic_beacon",
+  "source": "real_public_dataset",
+  "label_method": "dataset_ground_truth",
+  "generator": "training/build_dataset_c2_real_ctu.py + training/build_malicious_pcap_logs.py",
+  "configuration": {
+    "dataset": "CTU-13 (Stratosphere Lab)",
+    "scenario": "CTU-Malware-Capture-Botnet-48 (Sogou, IRC + HTTP ClickFraud)",
+    "filter": "argus binetflow.2format ground-truth 5-tuples labeled 'Botnet' only",
+    "usable_groups": "2 of 4 candidate (src,dst,dst_port) groups had enough real events over enough real time to produce dense-snapshot rows -- the other 2 (3 events each, clustered within 4-108s) were too sparse for this feature-computation method, same limitation build_dataset_c2.py's own synthetic capture has"
+  },
+  "expected_behavior": {
+    "provenance": "real malware C2 traffic, not a generator artifact"
+  },
+  "repetitions": 2,
+  "applies_to_datasets": ["training/dataset_c2_real_ctu.csv (pending merge into training/dataset_c2.csv)"],
+  "notes": "First real botnet C2 evidence for this detector -- dataset_c2.csv was 100% self-generated before this. 1904 real rows from 2 real (src,dst,port) groups: 147.32.84.165->61.135.188.210:80 (10 events/234s) and 147.32.84.165->123.126.51.33:80 (19 events/199s). Real ceiling, not a target -- matches the TLS real-evidence framing."
+}

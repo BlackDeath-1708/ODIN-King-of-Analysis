@@ -1,21 +1,21 @@
 {
   "confusion_matrix": {
-    "tp": 6551,
-    "fp": 8,
-    "tn": 1178,
+    "tp": 6066,
+    "fp": 5,
+    "tn": 1164,
     "fn": 0
   },
-  "precision": 0.9988,
+  "precision": 0.9992,
   "recall": 1.0,
-  "f1": 0.9994,
-  "false_positive_rate": 0.0067,
+  "f1": 0.9996,
+  "false_positive_rate": 0.0043,
   "false_negative_rate": 0.0,
-  "accuracy": 0.999,
-  "test_set_size": 7737,
+  "accuracy": 0.9993,
+  "test_set_size": 7235,
   "detector": "c2",
-  "n_train_rows": 23481,
-  "n_test_rows": 7737,
+  "n_train_rows": 33317,
+  "n_test_rows": 7235,
   "grouping": "session_id",
-  "notes": "Real beacon-emulator traffic + benign TCP connect() bursts, loopback, plus a 2026-09-11 range-extension capture (benign_long/c2_slow sessions). Model trusted live within observation_count<=20 and mean_interval<=45.0s -- see backend/detectors/c2.py and ML_MODELS.md for the range-gate rationale. This held-out set includes both the original and extended-range sessions.",
-  "generated_at": "2026-09-11T09:48:28Z"
+  "notes": "Real beacon-emulator traffic + benign TCP connect() bursts, loopback, plus a 2026-09-11 range-extension capture (benign_long/c2_slow sessions). Model trusted live within observation_count<=20 and mean_interval<=45.0s -- see backend/detectors/c2.py and ML_MODELS.md for the range-gate rationale. This held-out set includes both the original and extended-range sessions, plus new multi-host scenarios (loopback + multi-host combined).",
+  "generated_at": "2026-09-14T16:16:33Z"
 }

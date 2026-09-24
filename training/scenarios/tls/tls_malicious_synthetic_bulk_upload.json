@@ -1,0 +1,30 @@
+{
+  "scenario_id": "tls_malicious_synthetic_bulk_upload",
+  "threat_class": "tls",
+  "is_malicious": true,
+  "attack_subtype": "tls_bulk_exfil",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/build_dataset_tls.py:gen_malicious_rows / _synth_bulk_pktseq",
+  "configuration": {
+    "shape": "one-sided large upload, near-MTU packets, low size variance",
+    "orig_bytes_range": [
+      50000,
+      2000000
+    ],
+    "protocols": [
+      "ssl",
+      "quic"
+    ]
+  },
+  "expected_behavior": {
+    "byte_ratio": "highly asymmetric outbound",
+    "pkt_size_mean": "near MTU"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_tls.csv",
+    "training/dataset_tls_seq.npz (synthetic arm)"
+  ],
+  "notes": "Same real-data-scarcity caveat as tls_malicious_synthetic_beacon."
+}

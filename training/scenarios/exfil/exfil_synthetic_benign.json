@@ -1,0 +1,31 @@
+{
+  "scenario_id": "exfil_synthetic_benign",
+  "threat_class": "exfil",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/build_dataset_exfil.py",
+  "configuration": {
+    "orig_bytes_range": [
+      100,
+      50000
+    ],
+    "ports": [
+      80,
+      443,
+      8080,
+      22,
+      25,
+      3306
+    ]
+  },
+  "expected_behavior": {
+    "byte_ratio": "balanced"
+  },
+  "repetitions": 2000,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Supplements real local-benign with more volume/port diversity than one local port provides."
+}

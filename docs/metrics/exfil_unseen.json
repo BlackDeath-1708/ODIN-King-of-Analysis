@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 1,
+    "fp": 0,
+    "tn": 2500,
+    "fn": 0
+  },
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "false_positive_rate": 0.0,
+  "false_negative_rate": 0.0,
+  "accuracy": 1.0,
+  "test_set_size": 2501,
+  "detector": "exfil_unseen",
+  "n_train_rows": 13763,
+  "n_test_rows": 2501,
+  "grouping": "scenario_id (single held-out scenario: ['exfil_multi_03'])",
+  "notes": "Generalization check: this scenario never appeared in training, GroupKFold, or threshold selection (P9 isolation requirement).",
+  "generated_at": "2026-09-14T16:16:54Z"
+}

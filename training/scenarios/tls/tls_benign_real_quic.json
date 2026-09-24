@@ -1,0 +1,22 @@
+{
+  "scenario_id": "tls_benign_real_quic",
+  "threat_class": "tls",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_quic.py",
+  "configuration": {
+    "protocol": "quic",
+    "distinct_real_hosts": "~25"
+  },
+  "expected_behavior": {
+    "pkt_size_sequence": "varied (real HTTP/3 traffic)"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_tls.csv",
+    "training/dataset_tls_seq.npz"
+  ],
+  "notes": "Real aioquic handshakes to real HTTP/3 hosts."
+}

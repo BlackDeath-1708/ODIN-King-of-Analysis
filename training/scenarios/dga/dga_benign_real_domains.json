@@ -1,0 +1,20 @@
+{
+  "scenario_id": "dga_benign_real_domains",
+  "threat_class": "dga",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "dataset_ground_truth",
+  "generator": "training/train_dga.py:gen_real_domain_traffic",
+  "configuration": {
+    "method": "real observed domain traffic"
+  },
+  "expected_behavior": {
+    "entropy": "low"
+  },
+  "repetitions": 6000,
+  "applies_to_datasets": [
+    "in-memory only -- train_dga.py, not persisted to a CSV"
+  ],
+  "notes": null
+}

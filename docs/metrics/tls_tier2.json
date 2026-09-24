@@ -1,0 +1,28 @@
+{
+  "confusion_matrix": {
+    "tp": 1029,
+    "fp": 56,
+    "tn": 1302,
+    "fn": 47
+  },
+  "precision": 0.9484,
+  "recall": 0.9563,
+  "f1": 0.9523,
+  "false_positive_rate": 0.0412,
+  "false_negative_rate": 0.0437,
+  "accuracy": 0.9577,
+  "test_set_size": 2434,
+  "detector": "tls_tier2",
+  "n_train_rows": 8396,
+  "n_test_rows": 2434,
+  "grouping": "group",
+  "notes": "Confidence-gated Tier-2 seq-CNN over raw pkt_sizes/pkt_gaps, evaluated at Platt-calibrated proba @ 0.51 (tier2-specific threshold, see tier2_model.py) -- the actual operating point tls_malware.py serves, not an arbitrary evaluation cutoff. Held-out malicious rows: 13 real, 5402 synthetic total in dataset -- see provenance_recall below for whether this model actually generalizes to real traffic or only fits the synthetic generator.",
+  "generated_at": "2026-09-15T07:47:58Z",
+  "decision_threshold": 0.51,
+  "provenance_recall": {
+    "synthetic": {
+      "recall": 0.9563,
+      "n": 1076
+    }
+  }
+}

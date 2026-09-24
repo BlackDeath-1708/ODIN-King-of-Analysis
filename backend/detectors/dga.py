@@ -45,6 +45,7 @@ from collections import Counter
 from pathlib import Path
 
 from .base import Detector
+from .features import feature_contributions
 
 KNOWN_TLDS = {
     'com', 'net', 'org', 'gov', 'edu', 'io', 'co', 'uk', 'de', 'fr', 'us',
@@ -228,6 +229,7 @@ class DGADetector(Detector):
                     src_ip=src_ip, src_port=None, dst_ip=dst_ip, dst_port=dst_port,
                     flow_id=event.get("uid"), severity="HIGH", confidence=confidence,
                     evidence=evidence, window_seconds=0, event_ts=ts,
+                    detection_method="rule_based",
                 )
 
         # Path B: DGA ML classifier
@@ -253,4 +255,6 @@ class DGADetector(Detector):
             src_ip=src_ip, src_port=None, dst_ip=dst_ip, dst_port=dst_port,
             flow_id=event.get("uid"), severity=severity, confidence=proba,
             evidence=evidence, window_seconds=0, event_ts=ts, calibrated=self.calibrated,
+            detection_method="ml",
+            feature_contributions=feature_contributions(self.model, FEATURE_NAMES, feat_dict),
         )

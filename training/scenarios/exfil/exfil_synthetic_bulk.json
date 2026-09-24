@@ -1,0 +1,27 @@
+{
+  "scenario_id": "exfil_synthetic_bulk",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "bulk_exfil",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/build_dataset_exfil.py",
+  "configuration": {
+    "orig_bytes_range": [
+      100000,
+      10000000
+    ],
+    "duration_sec": [
+      10,
+      600
+    ]
+  },
+  "expected_behavior": {
+    "byte_ratio": "highly asymmetric outbound"
+  },
+  "repetitions": 4000,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Synthetic top-up for class volume."
+}

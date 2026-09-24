@@ -1,0 +1,25 @@
+{
+  "scenario_id": "exfil_local_benign",
+  "threat_class": "exfil",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_exfil.py",
+  "configuration": {
+    "protocol": "HTTP GET",
+    "port": 8199,
+    "orig_bytes_range": [
+      0,
+      10000
+    ]
+  },
+  "expected_behavior": {
+    "byte_ratio": "balanced"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Real local capture, loopback."
+}

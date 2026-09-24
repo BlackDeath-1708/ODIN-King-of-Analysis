@@ -1,0 +1,26 @@
+{
+  "scenario_id": "exfil_real_icmp_covert",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "icmp_covert",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_exfil.py",
+  "configuration": {
+    "protocol": "icmp",
+    "targets": [
+      "8.8.8.8",
+      "1.1.1.1",
+      "9.9.9.9"
+    ],
+    "orig_bytes_min": 1000
+  },
+  "expected_behavior": {
+    "protocol_anomaly": "large ICMP payload"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Real pings to real public hosts. Thin real class -- Zeek aggregates repeated pings to the same host into very few long-lived flows, supplemented synthetically."
+}

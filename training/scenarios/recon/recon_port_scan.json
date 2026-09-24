@@ -1,0 +1,29 @@
+{
+  "scenario_id": "recon_port_scan",
+  "threat_class": "recon",
+  "is_malicious": true,
+  "attack_subtype": "port_scan",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_recon.py",
+  "configuration": {
+    "tool": "nmap -sT",
+    "port_range_width": [
+      50,
+      800
+    ],
+    "scan_rate_pps": [
+      10,
+      100
+    ]
+  },
+  "expected_behavior": {
+    "unique_ports": "high",
+    "port_entropy": "high"
+  },
+  "repetitions": 90,
+  "applies_to_datasets": [
+    "training/dataset_recon.csv"
+  ],
+  "notes": "TCP-connect scan (no root needed); Zeek logs the same fan-out signature as -sS."
+}

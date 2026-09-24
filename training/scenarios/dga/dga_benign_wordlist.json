@@ -1,0 +1,21 @@
+{
+  "scenario_id": "dga_benign_wordlist",
+  "threat_class": "dga",
+  "is_malicious": false,
+  "attack_subtype": null,
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/train_dga.py:gen_benign",
+  "configuration": {
+    "method": "real English wordlist combinations"
+  },
+  "expected_behavior": {
+    "entropy": "low",
+    "ngram_score": "high (dictionary-like)"
+  },
+  "repetitions": 6000,
+  "applies_to_datasets": [
+    "in-memory only -- train_dga.py, not persisted to a CSV"
+  ],
+  "notes": null
+}

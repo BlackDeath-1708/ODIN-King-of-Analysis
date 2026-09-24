@@ -127,8 +127,24 @@ test_preds = final_model.predict(X_test)
 save_metrics(
     "ddos", y_test, test_preds,
     n_train_rows=len(X_train_final), n_test_rows=len(X_test), grouping="session_id",
-    notes="Real hping3 SYN/UDP/spoofed-source floods + benign TCP connect() bursts, loopback.",
+    notes="Real hping3 SYN/UDP/spoofed-source floods + benign TCP connect() bursts, loopback + multi-host.",
 )
+
+# P10/P9: evaluate on the held-out UNSEEN multi-host scenario (ddos_multi_04,
+# spoofed-source at a distinct rate profile) -- see train_recon.py's identical
+# block for the full rationale.
+UNSEEN_DATASET = REPO_ROOT / "training" / "dataset_ddos_unseen.csv"
+if UNSEEN_DATASET.exists():
+    udf = pd.read_csv(UNSEEN_DATASET)
+    X_unseen, y_unseen = udf[FEATURES].values, udf["label"].values
+    unseen_preds = final_model.predict(X_unseen)
+    save_metrics(
+        "ddos_unseen", y_unseen, unseen_preds,
+        n_train_rows=len(X_train_final), n_test_rows=len(X_unseen),
+        grouping=f"scenario_id (single held-out scenario: {udf['scenario_id'].unique().tolist()})",
+        notes="Generalization check: this scenario never appeared in training, GroupKFold, or "
+              "threshold selection (P9 isolation requirement).",
+    )
 
 fit_groups, cal_groups = train_test_split(train_groups, test_size=0.25, random_state=42)
 fit_mask = df["session_id"].isin(fit_groups).values

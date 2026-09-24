@@ -639,14 +639,20 @@ section). Reworked in the same session as the DDoS/Recon/C2 real-traffic
 retraining above, closing as much of the "no real-capture cross-check" gap
 as ethically/practically possible:
 
-- **DGA**: still fully synthetic (no ethical way to run real malware DGA
-  code), but the generators now reproduce the publicly-documented
-  *algorithmic shape* of real DGA families (Conficker, Cryptolocker, Zeus
-  GameOver, Necurs, Tinba, Ramnit, Banjori, Suppobox, Matsnu) instead of one
-  generic random-string generator — see `training/train_dga.py`'s
-  docstring. This is what PS 26145's own suggested methodology ("DGA
-  samples from published algorithms, e.g. via DGArchive") looks like
-  without DGArchive's registration-gated dataset itself.
+- **DGA**: mostly synthetic, now with a real arm added 2026-09-13. The 9
+  original generators reproduce the publicly-documented *algorithmic shape*
+  of real DGA families (Conficker, Cryptolocker, Zeus GameOver, Necurs,
+  Tinba, Ramnit, Banjori, Suppobox, Matsnu) instead of one generic
+  random-string generator — see `training/train_dga.py`'s docstring. This
+  is what PS 26145's own suggested methodology ("DGA samples from published
+  algorithms, e.g. via DGArchive") looks like without DGArchive's
+  registration-gated dataset itself. **Added 2026-09-13**: 6,000 domains
+  that are the literal real output of 12 real malware families' own DGA
+  code — not a re-implementation of their shape — from UMUDGA (Zago et al.
+  2020, DOI 10.17632/y8ph45msv8.1, MIT licensed). Two gated/dead live-feed
+  alternatives (Bambenek Consulting, Netlab 360) were tried first and
+  rejected — see `scripts/download_umudga_dga.py`'s docstring and the "DGA
+  real-malware-data addition" section below.
 - **TLS flow-stats**: benign class is now REAL — actual HTTPS requests to
   ~142 diverse real domains, captured and joined via Zeek's `uid` (see the
   SSLByteEnricher bug/fix below). Malicious class stays synthetic (no
@@ -662,7 +668,7 @@ as ethically/practically possible:
 
 | Model | Training data | Rows | GroupKFold F1 | Held-out F1 |
 |---|---|---|---|---|
-| DGA (`dga_model.joblib`) | 6000 synthetic benign + 13,000 synthetic DGA across 9 published-algorithm families, grouped by length bucket | 19,000 | 0.987 (mean per-fold) | 0.99 |
+| DGA (`dga_model.joblib`) | 12,000 benign (6,000 synthetic + 6,000 real observed domains) + 19,000 DGA (13,000 synthetic across 9 published-algorithm families + 6,000 REAL from UMUDGA), grouped by length bucket | 31,000 | 0.9618 (mean per-fold) | 0.9952 |
 | TLS flow-stats (`tls_flow_model.joblib`) | 9,530 REAL benign (real HTTPS to 142 domains) + 9,530 synthetic malicious, grouped by domain | 19,060 | 0.9996 | 1.00 |
 | Exfil (`exfil_model.joblib`) | 7,001 REAL rows (5,600 benign + 1,401 exfil-shaped: high-upload/ICMP/DNS) + 8,500 synthetic top-up, grouped uniquely per row | 15,501 | 1.000 | 1.00 |
 
@@ -672,6 +678,92 @@ real-algorithm-shaped families (some, like BANJORI's low-mutation pattern,
 genuinely closer to benign dictionary words on several features), the
 classifier has to do real work — a lower, more honest number here is a
 *better* sign than the old perfect one, not a regression.
+
+## DGA real-malware-data addition (2026-09-13)
+
+Closes the "DGA remains fully synthetic" gap flagged in this project's own
+honest-limitations sections, for a bounded subset. `scripts/download_umudga_dga.py`
+pulls 6,000 domains (12 folders x 500) from **UMUDGA** (Zago, Gil Pérez &
+Martínez Pérez, "UMUDGA: a dataset for profiling DGA-based botnet,"
+*Computers & Security*, 2020, DOI 10.1016/j.cose.2020.101719; dataset DOI
+10.17632/y8ph45msv8.1, **MIT licensed**) — over 30M domains produced by
+*actually executing* 50 real malware families' own DGA code in a
+controlled environment. These are the literal real output of real malware,
+not this project's other 9 generators' re-implementation of a published
+algorithm's *shape*.
+
+**Two other sources were tried first and rejected, documented rather than
+silently swapped:**
+- **Bambenek Consulting's feed** (`osint.bambenekconsulting.com`) returns
+  HTTP 403 with a message requiring a manually-issued license even for
+  research/non-profit use — not a plug-and-fetch download despite being
+  nominally "free."
+- **Netlab 360's feed** (`data.netlab.360.com`) has a TLS certificate that
+  expired December 2023; the host is unreachable from this environment
+  (connection timeout, verified directly with both `curl` and `openssl
+  s_client`).
+
+**Sourcing mechanics**: UMUDGA's own public file-listing API
+(`data.mendeley.com/api/datasets/y8ph45msv8/files`) returns direct
+per-file download URLs with no authentication required — confirmed by
+actually downloading and inspecting content, not just reading
+documentation. One real friction point found and fixed: the API's default
+`urllib` user-agent got a `403` from Mendeley's edge (Cloudflare bot
+filtering), not an auth wall — a browser-style `User-Agent` header clears
+it, verified by retrying the identical request with only that header
+added. 12 of the 37 eligible folders were picked by evenly spacing across
+the *sorted* folder-ID listing (not just the first 12), so the sample
+isn't biased toward upload order.
+
+**A real limitation, documented rather than hidden**: UMUDGA's file-listing
+API exposes only opaque per-family folder UUIDs — it does not expose the
+official malware family name per folder, and the project's own GitHub wiki
+(checked directly) only documents feature-distribution statistics, not a
+folder-to-family key. Rather than guess or silently assert a family name
+that isn't confirmed, each row carries its real source folder ID and a
+purely descriptive `shape_hint` (e.g. `random_alnum_fixed_len`,
+`dict_concat_hyphenated`, `hex_hash_style`) inferred by eye from sample
+content — never presented as the authoritative family identity. The
+dataset's own DOI/paper is the authoritative source for the official
+50-family roster.
+
+**Verified, not just downloaded**: visual inspection of the 12 sampled
+folders before committing to them confirmed genuine cross-family
+diversity — fixed- and variable-length random-alphanumeric shapes, a
+32-char hex/hash-style shape, and two distinct dictionary-word-concatenation
+shapes (e.g. `wedding-muscle.com`, `migrationispeopleofof.biz`) that are
+exactly the kind of low-entropy, Suppobox-like pattern this detector's
+`word_boundary_score` feature exists to catch. Retraining with this data
+blended in (replacing nothing — additive to the existing 9 synthetic
+generators) held the held-out test F1 at 0.9952 (previously 0.99) with no
+regression on either of this project's own prior DGA fixes: the real
+ambient-DNS false-positive domains (`time.cloudflare.com`,
+`api.globalping.io`, `main.vscode-cdn.net`) and the held-out generalization
+domains (`cdn.discordapp.com`, `api.stripe.com`) all still clear at <0.2%
+confidence, and known-malicious shapes (`xjkqmzpwl.ru`,
+`sunshinevalleycloud.com`) still fire at 100%. A genuine generalization
+check — 5 real UMUDGA domains deliberately excluded from the 6,000-row
+training sample (every 200th line skips these) — all scored 100% DGA
+confidence, confirming the model learned the family's real pattern rather
+than memorizing the specific rows it was shown.
+
+Mean GroupKFold F1 dropped from 0.987 to 0.9618 (one fold as low as
+0.8539) — read the same way the 2026-09-11 rework's F1 drop was read: a
+harder, more behaviorally diverse dataset giving the classifier more real
+work to do is a more honest number, not a regression. Held-out test F1 (a
+single fixed split, not cross-validated) stayed essentially flat at
+0.9952, since the real UMUDGA rows' *aggregate* separability from benign
+is still clean — the added variance shows up specifically in GroupKFold's
+per-length-bucket folds, consistent with different UMUDGA families
+occupying different narrow length ranges that a single fold can land
+entirely on one side of.
+
+**What this does NOT claim**: 6,000 domains across 12 of UMUDGA's 50
+families is a bounded sample, not exhaustive coverage of the dataset or of
+real-world DGA diversity — the other 25 eligible folders and the full
+~900MB/30M-domain corpus remain available for a future expansion if this
+needs to scale further. Family identity is a descriptive hint, not a
+confirmed label (see above).
 
 **TLS/exfil's near-perfect F1 is more legitimate than it looks**: unlike
 the old fully-synthetic datasets (whose separability was a generator
@@ -1085,15 +1177,49 @@ byte-field bugs found the same way in earlier passes).
 
 ## Closing the last two gaps: JA4 feed re-check, and dnscat2 (2026-09-13)
 
-**JA4 threat-intel feed -- re-checked, genuinely still doesn't exist.**
-Went beyond the original "sslbl.abuse.ch doesn't publish one" check:
-FoxIO (JA4's creator) runs `ja4db.foxio.io`, but its own JS bundle shows
-the real database sits behind `/api/auth/signup-requests` and
+**JA4 threat-intel feed -- re-checked, genuinely still doesn't exist as a
+live download.** Went beyond the original "sslbl.abuse.ch doesn't publish
+one" check: FoxIO (JA4's creator) runs `ja4db.foxio.io`, but its own JS
+bundle shows the real database sits behind `/api/auth/signup-requests` and
 `/api/auth/token` -- a gated community database, not a public download.
 `foxio.io/intel-list` (referenced from the same bundle) redirects to
-`/404`. No public, freely-downloadable JA4 malicious-fingerprint feed
-exists as of this check -- the empty `ja4_blacklist.json` stays an
-honest placeholder, not a shortcut that was never actually attempted.
+`/404`. No public, freely-downloadable JA4 malicious-fingerprint *feed*
+exists as of this check.
+
+**Later closed a different way (2026-09-13, second pass): computed real
+JA4 hashes ourselves, from real malware pcaps, instead of waiting for a
+feed.** JA4 (unlike JA3's closed sslbl feed) is an open, published
+algorithm -- FoxIO ships an official reference tool
+(`FoxIO-LLC/ja4`, `python/ja4.py`) to compute it from any pcap. Used
+**once, offline, non-commercially** (per that tool's own FoxIO License
+1.1, which permits exactly this: academic/internal research use) against
+the same malware pcaps pulled for the TLS real-data addition below --
+never vendored into this repo, and never called at runtime, same
+one-way-compliant "run once, cache the output" pattern as
+`scripts/download_ja3_blacklist.py`. One real bug in FoxIO's own tool was
+hit and worked around locally (a `KeyError` on certain streams in its
+`display()` function crashed the whole run before reaching later packets
+in the pcap -- patched to skip gracefully in the local throwaway copy,
+never upstreamed or committed).
+
+Yielded **5 real, ground-truth-confirmed JA4 hashes** now populating
+`backend/data/ja4_blacklist.json`:
+- `t12d190800_d83cc789557e_7af1ed941c26` -- Latrodectus/Lumma Stealer's own
+  C2 client, identical across all 3 of its confirmed C2 domains
+  (aytobusesre.com, popfealt.one, auctiondecadecontaii.shop) -- a strong,
+  malware-specific signature, not a coincidence.
+- Two session-ticket variants of the same delivery-stage client
+  (`horaot.org`, the fake-Azure redirect page).
+- Two hashes from CTU-13's Neris (2011 botnet), extracted by joining
+  ja4.py's output against the same ground-truth Botnet 5-tuples
+  `build_dataset_tls_seq.py` already uses -- a `t10i...` prefix (TLS 1.0),
+  consistent with a 14-year-old capture.
+
+JA3 alone already satisfied PS 26145 (d)'s "JA3/JA3S or JA4" wording
+regardless -- this closes the "ships empty" gap for real, not just on
+paper. Verified end-to-end: feeding one of these hashes through
+`TLSMalwareDetector.process()` directly fires a HIGH-severity alert with
+`detection_method: ja4_blacklist` and the correct family attribution.
 
 **dnscat2 (real tool, built from source in a throwaway container --
 iodine's approach, no host root needed):** cloned `iagox86/dnscat2`,
@@ -1128,3 +1254,403 @@ precision cost on ordinary traffic. The two-path coverage already
 verified above is the better trade: a tight rule for the record types
 that are almost always evidence of something, and a general classifier
 picking up the rest.
+
+## Tier-2 confidence-gated seq-CNN for TLS malware (2026-09-12)
+
+Path B's RandomForest (tls_flow_model.joblib) only ever sees scalar
+aggregates of the packet-size/gap sequence (mean/std) -- see
+`_flow_features()`'s comment on why (RandomForest has no native
+variable-length input support). A second model that looks at the *raw*
+sequence can catch subtler shapes the aggregates wash out, but running it
+on every flow would cost real per-event latency for no benefit on the
+~90% of flows Tier 1 already calls confidently.
+
+Added a **confidence gate**: Tier 1's proba is already Platt-calibrated
+(`calibration/calibrate_models.py`), so `0.4 <= proba <= 0.7` is a
+genuinely ambiguous probability band, not an arbitrary cut on a raw score.
+Only flows landing in that band get a second opinion from a compact 1D-CNN
+(`backend/detectors/tier2_model.py`) over the first 12 packets'
+sizes/gaps (`backend/detectors/tier2_features.py`), which then *replaces*
+(not supplements) Tier 1's proba for the final `> 0.72` decision.
+`evidence.detection_method` becomes `'flow_stats_ml+tier2_seq_cnn'` when
+Tier 2 fired, `'flow_stats_ml'` otherwise -- verified end-to-end with a
+mocked Tier-1/Tier-2 pair: Tier 2 is invoked exactly when proba is
+in-band and never otherwise, and its output alone determines whether an
+in-band flow ends up alerting.
+
+CNN chosen over a GRU: 12 timesteps is too short for recurrence to earn
+its keep over local pattern-matching, and a CNN is easier to keep small
+(~3k params: two Conv1d layers, global max-pool over the packet axis so
+padding is naturally inert, two FC layers) and well-regularized on a
+dataset that's still partly synthetic (see below). `torch==2.14.0+cpu`
+added to `backend/requirements.txt` -- confirmed a real `cp314` wheel
+exists for this repo's Python 3.14.4 venv before committing to it.
+
+**Training data, honestly**: same real-malware-TLS-traffic gap
+`build_dataset_tls.py` already documents for Tier 1's malicious class
+(no ethical real-world source existed at the time) -- except this time
+addressed rather than left as a caveat. Pulled a real CTU-13 botnet
+capture (Stratosphere Lab, scenario `CTU-Malware-Capture-Botnet-42`
+/Neris, CC-BY licensed, ground-truth-labeled) via
+`training/build_malicious_pcap_logs.py` (a disposable `docker run` against
+`zeek/zeek:latest`, not the live demo container) +
+`training/build_dataset_tls_seq.py` (joins Zeek's conn.log 5-tuple against
+the scenario's own argus `Botnet`-labeled flows). That scenario's capture
+contains 63 total SSL/QUIC sessions with a packet sequence, of which
+**13** matched a ground-truth Botnet 5-tuple riding port 443 -- small
+(most of that scenario's 71 raw Botnet/443 flows are `S_RA`/`S_`-state
+TCP-Attempt rows with no completed handshake, so no ssl.log entry at all;
+13 is what's left after that), but genuinely real, not synthetic-
+generator-fingerprinting. Tagged with a `provenance` column (alongside
+5,402 synthetic-malicious rows kept as a comparison arm, not deleted) so
+train_tier2.py can report real vs. synthetic held-out recall separately
+as a standing sanity check against a model that only fits the generator
+-- with only one real-malicious group so far, that split's held-out slot
+came up empty this run (the single group landed entirely in train), which
+is itself an honest artifact of n=13 rather than a bug. `SCENARIO_LABELS`
+in build_dataset_tls_seq.py is a one-line-per-scenario dict specifically
+so trying more CTU-13/Stratosphere scenarios is additive, not a rewrite.
+
+Trained on real-benign + 13 real-malicious + synthetic-malicious:
+`docs/metrics/tls_tier2.json` -- precision=1.0, recall=0.520,
+F1=0.684 on held-out synthetic malicious rows (real-malicious held-out
+count was 0 this run, see above). The recall ceiling here is expected
+and not a regression to chase yet: 40 epochs on a deliberately tiny net
+against a still mostly-synthetic dataset -- the point of this pass was
+proving the gate/schema/graceful-degrade/calibration plumbing, not tuning
+accuracy against data that's still mostly not real. Retraining (once more
+real-malicious rows land) is `training/build_dataset_tls_seq.py` +
+`training/train_tier2.py`, no other code changes -- `tls_tier2_model.pt`
+gets overwritten in place.
+
+**Calibration**: a code-review pass on this feature caught a real issue
+here worth recording -- the first version reused Tier 1's `calibrated`
+flag (and its 0.72/0.85 severity thresholds) for Tier-2-driven alerts too,
+mislabeling a raw CNN sigmoid as a Platt-calibrated probability, and
+comparing it against thresholds tuned for a differently-distributed
+calibrated score. Fixed the same way `calibration/calibrate_models.py`
+calibrates the other 6 (sklearn) models -- `train_tier2.py` now fits a
+1-D Platt scaling (`calibrated_logit = a*raw_logit + b`, via
+`sklearn.linear_model.LogisticRegression` on a held-out group split) on
+top of the frozen trained net, saved to
+`backend/ml_models/tls_tier2_calibration.npz`. `tier2_model.py`'s
+`Tier2Model.calibrated` reflects whether that file loaded, and
+`tls_malware.py` now reports `calibrated=self.tier2_model.calibrated`
+(not `self.calibrated`, Tier 1's flag) whenever Tier 2 actually decided
+the alert -- verified directly: the `calibrated` field on a Tier-2-driven
+alert now reads `True` only because the calibration file loaded, not
+because Tier 1 happened to be calibrated.
+
+## TLS real-malicious-data addition (2026-09-13)
+
+Closes the "Zero real-malicious coverage feeds the flow-stats model" gap
+flagged in `training/scenarios/README.md`'s own known-gaps list. Sourced
+from **malware-traffic-analysis.net**, a well-known, write-up-annotated
+real-malware-pcap repository (each post ships an analyst-confirmed IOC
+file naming the exact C2/malicious-infra domains -- ground truth from a
+human analyst, not inferred from traffic shape).
+
+**Three 2024 samples were pulled and checked via their own IOC files
+before committing to any of them** -- a real, useful negative finding:
+- **SSLoad → Cobalt Strike** and **DarkGate**: both confirmed malware
+  families, but in *these specific captures* their actual C2 runs over
+  plain HTTP (port 80/8094), not TLS -- checking the write-up's own
+  "INFECTION TRAFFIC"/"C2 TRAFFIC" sections directly showed this; a family
+  name alone ("Cobalt Strike is TLS C2!") is not a substitute for checking
+  the actual sample. Contribute nothing to this dataset.
+- **Latrodectus → Lumma Stealer** (2024-03-07): confirmed real HTTPS C2 --
+  the post's own traffic log shows real repeated ClientHellos to
+  `aytobusesre.com`/`popfealt.one` roughly 10-30 minutes apart (genuine
+  beacon timing) and to `auctiondecadecontaii.shop` (Lumma Stealer's own
+  exfil channel). Used.
+
+Processed through the exact same offline-Zeek pipeline the live demo's
+replay feature and the existing Neris CTU-13 addition already use
+(`training/build_malicious_pcap_logs.py`, a disposable `docker run`, never
+touching the live `zeek_monitor` container). Yielded **22 real flows**
+across 4 confirmed-malicious domains. Two domains seen in the same pcap
+were deliberately **excluded**: `firebasestorage.googleapis.com` is
+legitimate Google infrastructure abused for hosting (blacklisting it would
+mislabel a real Google service, not malware), and `lufyfeo.org` (the
+initial email-link redirect) isn't named under the IOC file's own
+C2/malicious-infra sections.
+
+**Flow-stats RF model (Tier 1, `train_tls_flow.py`) -- shipped
+successfully.** These 22 rows brought the malicious class from 100%
+synthetic to real+synthetic; held-out F1 stayed at 0.999 (FPR rose
+slightly to 0.057 on this small 20-domain-group test split, worth watching
+as more real domains are added, not alarming at n=20). See
+`training/scenarios/tls/tls_malicious_real_latrodectus_lumma_2024.json`
+for the full domain list and exclusions.
+
+**Tier-2 seq-CNN (`train_tier2.py`) -- attempted, found a regression,
+reverted rather than shipped.** Adding the same 22 rows to
+`dataset_tls_seq.npz` (35 real-malicious rows total, up from 13) and
+retraining produced a model that, after its own Platt calibration, still
+scored 2 of 5 spot-checked **real benign** flows at 0.82/0.9997
+"malicious" -- verified directly against
+`backend/detectors/tier2_model.py`'s actual serve-time `predict()` path,
+not just the training script's own summary metrics. The pooled GroupKFold
+confusion matrix was `[[0 correct, 202 wrong], ...]` for benign rows,
+reproduced identically on a second training run (not an unlucky
+initialization). Most likely cause: this dataset's real-benign count (202
+rows) is tiny relative to a neural net's capacity, and the new
+real-malicious rows pulled the decision boundary somewhere that overlaps
+more with real benign traffic than Neris's rows did. **The regressed
+model/calibration/metrics files were reverted to their last-committed
+version** -- the shipped tier2 model is unchanged from before this
+session. The extraction code itself
+(`build_dataset_tls_seq.py:build_real_malicious_rows_by_domain()`) is
+correct and kept (it matches exactly the 22 expected flows), documented
+with a prominent warning so a future run doesn't silently reproduce the
+same instability. See that function's docstring for the full note.
+**Takeaway for anyone extending this**: a successful data addition to one
+model (RF) doesn't automatically transfer to a second, architecturally
+different model (a small neural net) trained on the same underlying
+flows -- each needs its own verification against real held-out examples,
+not just a headline F1 number.
+
+## TLS Tier-2 evaluation/threshold fix (2026-09-15)
+
+The previously-reported `docs/metrics/tls_tier2.json` (precision=1.0,
+recall=0.520, F1=0.684) was misleading, though not maliciously so: it
+evaluated the model's **raw, uncalibrated sigmoid at a hardcoded 0.5
+threshold** -- a number nothing in production ever applies. `tls_malware.py`
+actually compares Tier 2's *Platt-calibrated* proba against a threshold
+(previously always Tier 1's shared 0.72), so the reported metric and the
+served behavior were measuring two different operating points on the
+model's own score distribution.
+
+Three real, independently-verified fixes, in the order they were found:
+
+1. **Evaluate at the real deployed operating point.** `train_tier2.py` now
+   computes the same `sigmoid(a*raw_logit + b)` transform `tier2_model.py`
+   serves, and evaluates/reports metrics against that, not the raw sigmoid.
+2. **Fixed the training seed.** `main()` had no `torch.manual_seed()` --
+   two back-to-back runs on the *identical* data split produced
+   meaningfully different net weights and, downstream, different chosen
+   thresholds (0.72 vs 0.91) with recall swinging accordingly. This was
+   caught directly: an initial diagnostic run (unseeded) showed 98.8%
+   recall at threshold 0.72, which looked like a dramatic fix -- reran with
+   a fixed seed and got 52% recall at a very different threshold (0.94),
+   proving the first result was random-init luck, not a real finding.
+   `torch.manual_seed(42)` makes this script's output reproducible run to
+   run, which matters more here than usual given the malicious class is
+   still mostly synthetic (13 real rows, see the section above).
+3. **Picked a threshold based on the actual precision/recall curve, not a
+   guessed floor.** `train_tier2.py` sweeps a tier2-specific decision
+   threshold on a held-out calibration split (`_select_threshold()`,
+   max recall subject to a precision floor), saved into
+   `tls_tier2_calibration.npz` and consulted by `tier2_model.py`/
+   `tls_malware.py` instead of reusing Tier 1's 0.72 for Tier-2-driven
+   decisions. Plotting the seeded model's real curve showed a sharp cliff,
+   not a smooth tradeoff: recall is a full 100% at threshold ~0.7-0.8
+   (precision ~91-92%), then collapses to ~52% once the threshold is
+   pushed past ~0.9 chasing precision into the high 90s/100%. A 0.95
+   precision floor lands past that cliff for a marginal precision gain
+   that -- since Tier 2 only ever runs on the ~10% ambiguous slice Tier 1
+   already narrowed down to -- means a handful of extra reviewable alerts,
+   not a flood. Used a 0.90 floor instead (still a strict bar for a
+   security detector), landing on the right side of the cliff.
+
+**Result, fully reproducible (seed=42):** `docs/metrics/tls_tier2.json` now
+reports precision=0.9484, recall=0.9563, F1=0.9523 (up from F1=0.684) at
+decision_threshold=0.51 on the calibrated scale. This is a genuine
+improvement from fixing three real bugs, not a cherry-picked run -- see
+`tests/test_tier2_threshold.py` for the unit-tested threshold-selection
+logic and `tests/test_batch_inference.py::test_tls_batch_matches_sequential`
+for confirmation this didn't interact badly with the Phase A1 batching
+change. `provenance_recall` in the metrics file still shows 0 held-out real-
+malicious rows (n=13 total, all landed in train this split -- an honest
+artifact of n=13, not a bug, same as the section above) -- this fix
+improves confidence in the synthetic-malicious-class recall specifically;
+real-malicious generalization remains the same open, disclosed gap it was
+before.
+
+## Adaptive statistical correlation layer (2026-09-15)
+
+`correlation/correlator.py`'s 4 named patterns (KILL_CHAIN, C2_EXFIL,
+DGA_C2, RECON_DDOS) are real but not adaptive -- any multi-stage attack
+shape outside those exact combinations went uncorrelated. Closing this
+without a labeled multi-stage-attack corpus (none exists here --
+`training/scenarios/` only has single-threat-class captures) meant a
+statistical approach, not a learned one.
+
+**New `correlation/baseline.py`, `AlertRateBaseline`:** tracks each
+threat_class's own alert rate as an exponentially-weighted Poisson
+process (mean inter-arrival gap -> `1 - exp(-rate*window)` = probability
+of seeing >=1 alert of that class in a window). A class with fewer than 3
+observed samples defaults to "not rare" (probability 1.0) rather than
+guessing a rate -- a cold-start class can never itself manufacture an
+anomaly. The correlation window itself is now adaptive too: 3x the
+observed global mean inter-alert gap, clamped to [60s, 900s], instead of
+a magic-number window mismatched to how fast this deployment's traffic
+actually moves.
+
+**`CorrelationEngine.ingest()`:** after the 4 named patterns find no
+match (unchanged, still checked first, still win), a new
+`_check_adaptive_anomaly()` computes a joint surprise score across every
+distinct threat_class present at that source within the adaptive window:
+`-sum(log(P(class in window)))` for each class's own baseline
+probability. Above 3.0 (`exp(-3) ~= 0.05` -- a conventional 5%
+significance cutoff, not an arbitrarily tuned number), it emits a new
+`MULTI_VECTOR_ANOMALY` alert -- same envelope as `MULTI_VECTOR`, evidence
+carrying `classes`, `surprise_score`, and `baseline_probabilities` so the
+"why" is inspectable, not a black box. Same per-combination dedup
+discipline as the named patterns (only suppress when nothing new
+contributed).
+
+**A real bug caught while wiring the frontend, not by the backend tests:**
+`CorrelationPage.jsx` filtered strictly on `threat_class === 'MULTI_VECTOR'`,
+and `AlertFeed.jsx`/`AlertsTimeline.jsx`/`NetworkFlowMap.jsx`/`AlertsPage.jsx`
+all had hardcoded threat-class maps keyed on the same literal -- every one
+of them would have silently never shown a `MULTI_VECTOR_ANOMALY` alert
+anywhere in the dashboard. Also found in `backend/app.py`'s `/api/stats`
+(a hardcoded dict with an `if tc in stats` guard silently drops any
+unlisted class) and `alert_export.py`'s STIX label map (had a safe
+`.get()` fallback, so not a crash, just a less specific exported label).
+All five frontend files plus both backend spots now handle the new class
+explicitly.
+
+**Tests** (`tests/test_correlation_baseline.py`): false-positive control
+(two classes that each fire every ~16s co-occurring is NOT flagged --
+that's ordinary background tempo, not surprising), genuine detection (two
+classes that each fire only every ~400s, kept rare behind a busy 60s-floor
+background from a third class, DO get flagged when they co-occur at one
+source), a regression check that the 4 named patterns still take priority
+and still emit `MULTI_VECTOR` (not shadowed by the new layer), and a
+cold-start check (brand-new classes never manufacture an anomaly from
+ignorance alone). All 4 passed on first run against the hand-derived
+math -- see the test file's own docstrings for the numbers.
+
+## Micro-batched inference (2026-09-15)
+
+`scripts/benchmark_throughput.py`'s own `bottleneck_finding` named the
+cause plainly: scikit-learn's per-call `predict_proba()` overhead
+(~12ms/call) dominated sustained throughput, paid once per event. Two
+fixes:
+
+1. **Eliminated a redundant model call.** `ddos.py`, `c2.py`, and
+   `recon.py` each called both `.predict()` *and* `.predict_proba()` per
+   event -- two scikit-learn calls to make one binary decision, when
+   `predict_proba()[:, 1] > 0.5` already reproduces `.predict()`'s own
+   argmax exactly for a binary classifier. Removed the `.predict()` call
+   entirely.
+2. **Batched every remaining model call.** `Detector.process_batch()`
+   (new, `backend/detectors/base.py`) scores a whole buffer of events with
+   one `predict_proba()` call instead of one per event.
+   `stream_consumer.py` now buffers incoming Kafka messages via
+   `consumer.poll(timeout_ms=100, max_records=64)` before dispatching a
+   batch to each detector -- 100ms keeps per-alert latency far inside PS
+   26145's "bounded latency, not an end-of-run report" requirement.
+
+Each detector's refactor (`_prepare()` for per-event state updates +
+gating, `_finish()` for the post-scoring decision) keeps `process()` and
+`process_batch()` sharing the exact same logic, differing only in whether
+the model is called once or once-per-batch. One real bug was caught and
+fixed *by* the correctness test for this change
+(`tests/test_batch_inference.py`, which asserts `process_batch()` produces
+byte-identical alerts to sequential `process()` calls): `c2.py`'s `_prepare()`
+initially stored `ctx["observations"]` as a reference to the live,
+still-growing `self._connections[key]` list rather than a snapshot count --
+by the time a deferred batch `_finish()` ran, later same-key events in the
+batch had already mutated it, corrupting both the evidence text and the
+feature vector fed to the model for earlier events sharing that key. Fixed
+by snapshotting `len(observations)` into an immutable `ctx["observation_count"]`
+at prepare-time.
+
+**Result, verified via `scripts/benchmark_throughput.py`
+(identical alert counts, batched vs. sequential):** 71.3 → 337.8 sustained
+flows/sec, a 4.74x speedup, on the same 10,000-event synthetic stream and
+the same 12-core laptop. See `docs/benchmark_results.json`'s
+`per_event`/`batched`/`batching_speedup_x` fields, and the section below
+for the live, Kafka-broker-inclusive measurement.
+
+## Real E2E throughput benchmark, and a real correlator bug it found (2026-09-12)
+
+A PS-26145 compliance review flagged the existing benchmark
+(`scripts/benchmark_throughput.py`) as too weak a throughput claim: it's a
+pure in-process Python loop calling `detector.process()` directly, with no
+Kafka, no Zeek, no network I/O -- its own `measurement_scope` field
+already says so. Added `scripts/benchmark_e2e.py`, a sibling (not a
+replacement) that generates real traffic against the *live* pipeline
+(Zeek `-i lo` capture -> Kafka -> `stream_consumer.py` -> detectors ->
+`alerts.json`) and measures what the pipeline itself sustained, via a
+self-contained `asyncio` TCP swarm (no `iperf3`/`tcpreplay` -- neither is
+installed and there's no passwordless sudo to install them unattended;
+`app.py`'s own `/api/replay` endpoint already made the same call for the
+same reason). Short connect->send->close cycles per worker (not held-open
+connections), matching `traffic/generate_c2.py`'s existing convention --
+Zeek only logs a connection on close, so held-open connections would
+produce a batchy, misleading throughput series instead of a real one.
+
+**First run found a real, serious bug, not a benchmark artifact.** The
+sink server initially never replied, making every generated flow
+maximally byte-asymmetric -- exactly `exfil.py`'s own detection signature.
+900 exfil alerts fired in ~25s, and `correlator.py`'s `C2_EXFIL` pattern
+fired a *new* `MULTI_VECTOR` alert on every single one of them (its dedup
+only suppresses when nothing new contributed, and every flow has a unique
+`flow_id`, so under a sustained burst nothing ever gets suppressed by
+design) -- each firing embedding an ever-growing `contributing_alerts`
+list (~1+2+...+900, roughly 405,000 embedded entries total across all
+firings). That bloated `alerts.json` enough that reading it back via
+`/api/alerts` **OOM-killed the live Flask process** (confirmed via
+`dmesg`: `Out of memory: Killed process ... (python3) ... anon-rss:
+6010412kB`). Fixed at the source, not by making the test gentler:
+`correlator.py`'s `_make_correlated` now caps `contributing_alerts` to the
+most recent `MAX_CONTRIBUTING_ALERTS = 20` entries -- bounds every
+correlated alert's size regardless of burst length, without changing
+which alerts count for the re-fire dedup (still correctly avoids missing
+a second, genuinely distinct attack chain). Also fixed the benchmark's
+own sink to echo the payload back (byte_ratio ~= 1.0, a real
+request/response shape) so it's a clean capacity test rather than an
+inadvertent (if correctly detected) exfil stress test.
+
+**Real numbers** (`docs/benchmark_e2e_results.json`, rerun after both
+fixes): generator offered 297.6 flows/sec / 4.88 Mbps (30 workers, 2KB
+payloads, 25s, rate-capped); the *pipeline* sustained ~21-22 events/sec at
+steady state -- a real, measured gap between offered and sustained load,
+consistent with the existing isolated-loop benchmark's ~44.8 flows/sec
+ceiling (scikit-learn `predict()` call overhead dominates either way).
+Explicitly scoped, same honesty convention as the original benchmark: a
+single 12-core mobile laptop running the capture, broker, and detectors
+on the same cores as the load generator -- not dedicated hardware, not a
+real NIC.
+
+## STIX 2.1 + CEF alert export (2026-09-12)
+
+A second compliance gap: the internal alert schema (`base.py`) already
+has every field PS 26145 literally lists (timestamp, flow_id,
+threat_class, confidence, evidence), but nothing exported it in a format
+an air-gapped SOC's SIEM/TIP would actually ingest. Added
+`backend/alert_export.py` -- `to_stix_indicator`/`to_stix_bundle` (STIX
+2.1, hand-rolled with stdlib `uuid`/`datetime` rather than the `stix2`
+library, since STIX 2.1 Indicator objects are simple enough to get right
+without an unverified-for-this-repo's-Python-3.14.4-venv new dependency)
+and `to_cef_line`/`to_cef_lines` (CEF syslog format, no widely-used
+library exists for it either way). Purely additive: takes the existing
+alert dict unchanged, zero changes to `base.py`, any detector, or the
+correlator.
+
+The real constraint this had to handle: `evidence` is not uniform across
+detectors -- a `list[str]` for ddos/recon/c2, a flat `dict` for
+dga/exfil/tls, and a `dict` with a nested `list` for the correlator's
+`MULTI_VECTOR` alerts. Both exporters just JSON-serialize `evidence`
+as-is rather than type-branching, which is correct for all three shapes.
+CEF escaping needed to be precise, not approximate: header fields escape
+`|`/`\`; extension *values* escape `=`/`\`/newlines -- and the JSON-encoded
+evidence blob needs CEF-escaping applied on top of, not instead of, JSON's
+own `"`-escaping, since JSON doesn't cover CEF's `=`/`|` delimiters.
+
+Two integration points, both live and verified against real alerts:
+**on-demand** (`GET /api/alerts/stix`, `GET /api/alerts/cef`, reusing the
+existing `read_alerts()`), and **continuous** (`write_alert()` in
+`stream_consumer.py` now also appends to `backend/alerts.cef.log` and
+`backend/alerts.stix.jsonl` on every alert -- the realistic air-gapped-SOC
+integration point, since CEF's whole purpose is syslog-style tailing).
+The continuous appends are best-effort (`try/except Exception`, logged
+and swallowed) and strictly *after* the existing `alerts.json` write, so
+a future malformed-evidence shape in some new detector can never crash
+the consumer loop or leave the canonical, dashboard-relied-on
+`alerts.json` inconsistent -- `write_alert()` had no error handling at
+all before this change.

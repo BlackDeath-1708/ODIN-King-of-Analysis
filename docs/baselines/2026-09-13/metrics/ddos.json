@@ -1,0 +1,21 @@
+{
+  "confusion_matrix": {
+    "tp": 2730,
+    "fp": 2,
+    "tn": 4044,
+    "fn": 11
+  },
+  "precision": 0.9993,
+  "recall": 0.996,
+  "f1": 0.9976,
+  "false_positive_rate": 0.0005,
+  "false_negative_rate": 0.004,
+  "accuracy": 0.9981,
+  "test_set_size": 6787,
+  "detector": "ddos",
+  "n_train_rows": 25509,
+  "n_test_rows": 6787,
+  "grouping": "session_id",
+  "notes": "Real hping3 SYN/UDP/spoofed-source floods + benign TCP connect() bursts, loopback.",
+  "generated_at": "2026-09-12T18:42:13Z"
+}

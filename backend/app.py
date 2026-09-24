@@ -8,6 +8,9 @@ import joblib
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
+import alert_export
+import forensic_chain
+
 app = Flask(__name__)
 CORS(app)
 
@@ -52,10 +55,45 @@ def get_alerts():
     alerts = read_alerts(limit)
     return jsonify(alerts)
 
+@app.route("/api/alerts/stix")
+def get_alerts_stix():
+    """STIX 2.1 Bundle export, for air-gapped SOC/TIP integration (PS
+    26145's standardized-alert-schema requirement) -- see alert_export.py.
+    On-demand pull; stream_consumer.py also writes this continuously to
+    backend/alerts.stix.jsonl for a tailing integration."""
+    limit = int(request.args.get("limit", 100))
+    bundle = alert_export.to_stix_bundle(read_alerts(limit))
+    return Response(json.dumps(bundle), mimetype="application/stix+json")
+
+
+@app.route("/api/alerts/cef")
+def get_alerts_cef():
+    """CEF syslog-line export, for air-gapped SOC/SIEM integration -- see
+    alert_export.py. On-demand pull; stream_consumer.py also writes this
+    continuously to backend/alerts.cef.log for a tailing integration."""
+    limit = int(request.args.get("limit", 100))
+    lines = alert_export.to_cef_lines(read_alerts(limit))
+    return Response("\n".join(lines), mimetype="text/plain")
+
+
+@app.route("/api/alerts/verify")
+def verify_alerts_chain():
+    """Forensic chain-of-custody check (PS 26145: 'preserves a clean chain
+    of custody for forensic use') -- independently recomputes the SHA-256
+    hash chain over the full alerts.json from genesis and reports whether
+    every record is provably unmodified since it was written. See
+    forensic_chain.py. Read-only; safe to call repeatedly (e.g. a "Verify
+    Chain Integrity" button)."""
+    return jsonify(forensic_chain.verify_chain(ALERTS_FILE))
+
+
 @app.route("/api/stats")
 def get_stats():
     alerts = read_alerts(500)
-    stats = {"ddos": 0, "recon": 0, "c2": 0, "dga": 0, "tls": 0, "exfil": 0, "MULTI_VECTOR": 0, "total": len(alerts)}
+    stats = {
+        "ddos": 0, "recon": 0, "c2": 0, "dga": 0, "tls": 0, "exfil": 0,
+        "MULTI_VECTOR": 0, "MULTI_VECTOR_ANOMALY": 0, "total": len(alerts),
+    }
     for a in alerts:
         tc = a.get("threat_class", "")
         if tc in stats:

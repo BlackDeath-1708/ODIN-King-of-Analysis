@@ -1,0 +1,28 @@
+{
+  "scenario_id": "exfil_real_dns_exfil",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "dns_tunnel_exfil",
+  "source": "real",
+  "label_method": "generator_ground_truth",
+  "generator": "training/capture/capture_exfil.py",
+  "configuration": {
+    "protocol": "udp",
+    "dst_port": 53,
+    "targets": [
+      "8.8.8.8",
+      "1.1.1.1",
+      "9.9.9.9"
+    ],
+    "orig_bytes_min": 2000
+  },
+  "expected_behavior": {
+    "to_dns": true,
+    "orig_bytes": "anomalously high for DNS"
+  },
+  "repetitions": null,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Real UDP bursts to real public DNS resolvers."
+}

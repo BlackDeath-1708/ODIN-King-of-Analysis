@@ -50,6 +50,7 @@ def connect_producer(retries=30, delay=2):
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_BOOTSTRAP,
                 value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+                key_serializer=lambda k: k.encode("utf-8") if k else None,
                 retries=5,
             )
             print(f"[PRODUCER] Connected to Kafka at {KAFKA_BOOTSTRAP}")
@@ -87,7 +88,19 @@ def publish_log(producer: KafkaProducer, filepath: Path, topic: str):
             event = json.loads(raw_line)
         except json.JSONDecodeError:
             continue
-        producer.send(topic, event)
+        # Partition key (ODIN throughput plan, Phase A3 -- horizontal
+        # scaling design): keying by source IP means every event for a
+        # given src_ip always lands on the same partition, which is what
+        # lets multiple stream_consumer.py processes share one Kafka
+        # consumer group (same GROUP_ID) safely -- every detector's
+        # per-source state (ddos.py's AdaptiveEntropyBaseline, correlator.py's
+        # per-src_ip history, etc.) stays correct because a given source's
+        # events are never split across two consumer processes. Zeek's
+        # dotted key names vary per log type (id.orig_h for conn/dns/ssl,
+        # same field for quic/pkt_seq) -- all share this one source-address
+        # field, so one key expression covers every topic this producer
+        # publishes to.
+        producer.send(topic, event, key=event.get("id.orig_h"))
         touch_heartbeat()
         sent += 1
         if sent % 25 == 0:

@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react'
-
 // Precision/recall/F1/false-positive-rate/false-negative-rate/confusion
 // matrix, computed from each detector's own held-out test set by
 // training/metrics_utils.py (persisted per-detector at docs/metrics/
@@ -9,16 +7,7 @@ import { useEffect, useState } from 'react'
 // GET /api/model_metrics. Exists so "how many false positives do you
 // generate" has an immediate, sourced number instead of requiring a dig
 // through ML_MODELS.md's prose.
-function useModelMetrics() {
-  const [data, setData] = useState(null)
-  useEffect(() => {
-    fetch('/api/model_metrics')
-      .then((r) => r.json())
-      .then(setData)
-      .catch(() => {})
-  }, [])
-  return data
-}
+import { useModelMetrics } from '../hooks/useApiPolling'
 
 const RATE_ROWS = [
   { key: 'precision', label: 'Precision' },

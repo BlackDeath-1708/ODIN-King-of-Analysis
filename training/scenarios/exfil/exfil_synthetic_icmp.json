@@ -1,0 +1,24 @@
+{
+  "scenario_id": "exfil_synthetic_icmp",
+  "threat_class": "exfil",
+  "is_malicious": true,
+  "attack_subtype": "icmp_covert",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/build_dataset_exfil.py",
+  "configuration": {
+    "orig_bytes_range": [
+      1500,
+      50000
+    ],
+    "proto": "icmp"
+  },
+  "expected_behavior": {
+    "protocol_anomaly": "large ICMP payload"
+  },
+  "repetitions": 1500,
+  "applies_to_datasets": [
+    "training/dataset_exfil.csv"
+  ],
+  "notes": "Supplements the thin real ICMP-covert class."
+}

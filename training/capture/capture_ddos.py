@@ -39,17 +39,23 @@ Ground truth label is generator intent, not whether any fixed rule fires.
 
 Run: sudo setcap cap_net_raw+ep $(which hping3)   # once
      python3 training/capture/capture_ddos.py
-Writes: training/capture/sessions_ddos.json
+     python3 training/capture/capture_ddos.py --victim-ips 10.10.0.20,10.10.0.21 \
+         --attacker-ip 10.10.0.10 --scenario-id ddos_multi_01
+Writes: training/capture/sessions_ddos.json (or sessions_ddos_<scenario-id>.json)
 """
+import argparse
 import json
 import random
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from multihost_common import add_multihost_args, resolve_victim_ips, sessions_filename, write_provenance  # noqa: E402
+
 OUT_DIR = Path(__file__).parent
-SESSIONS_FILE = OUT_DIR / "sessions_ddos.json"
 N_PAIRS = 65   # ~253 rows/pair observed previously -> targets ~16,400 rows total
 random.seed(7)
 
@@ -60,27 +66,27 @@ def mark(label):
     sessions.append({"label": label, "ts": time.time()})
 
 
-def _connect_once(port):
+def _connect_once(port, victim_ip):
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.3)
-        s.connect(("127.0.0.1", port))
+        s.connect((victim_ip, port))
         s.close()
     except Exception:
         pass
 
 
-def benign_traffic(duration, ports):
+def benign_traffic(duration, ports, victim_ip):
     end = time.time() + duration
     i = 0
     while time.time() < end:
         port = ports[i % len(ports)]
         i += 1
-        _connect_once(port)
+        _connect_once(port, victim_ip)
         time.sleep(random.uniform(0.5, 1.5))
 
 
-def hping3_flood(duration, port, target_rate):
+def hping3_flood(duration, port, target_rate, victim_ip):
     """Real hping3 SYN packets at a bounded rate -- never --flood."""
     interval_us = max(int(1_000_000 / target_rate), 200)   # floor: 5000 pps hard cap
     count = int(duration * target_rate)
@@ -88,7 +94,7 @@ def hping3_flood(duration, port, target_rate):
         "hping3", "-S", "-p", str(port),
         "-i", f"u{interval_us}",
         "-c", str(count),
-        "127.0.0.1",
+        victim_ip,
     ]
     try:
         subprocess.run(
@@ -107,29 +113,63 @@ PORT_POOL = list(range(8080, 8130))
 # script's first run to avoid the same contamination here.
 FLOOD_PORT_POOL = list(range(19080, 19109))
 
-t_start = time.time()
-for i in range(N_PAIRS):
-    # --- benign session ---
-    duration = random.uniform(15, 30)
-    n_ports = random.choice([1, 2, 3])
-    ports = random.sample(PORT_POOL, n_ports)
-    mark(f"benign_{i}_start")
-    benign_traffic(duration, ports)
-    mark(f"benign_{i}_end")
 
-    # --- ddos session (real hping3 SYN flood, rate-bounded) ---
-    flood_duration = random.uniform(8, 20)
-    target_rate = random.uniform(10, 300)
-    port = random.choice(FLOOD_PORT_POOL)
-    mark(f"ddos_{i}_start")
-    hping3_flood(flood_duration, port, target_rate)
-    mark(f"ddos_{i}_end")
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_multihost_args(parser)
+    args = parser.parse_args()
+    victim_ips = resolve_victim_ips(args)
+    sessions_file = OUT_DIR / sessions_filename("sessions_ddos.json", args.scenario_id)
 
-    elapsed = time.time() - t_start
-    print(f"[{elapsed:6.0f}s] pair {i + 1}/{N_PAIRS} done "
-          f"(benign: {duration:.0f}s/{n_ports}ports, ddos: {flood_duration:.0f}s@{target_rate:.0f}pps)")
+    t_start = time.time()
+    for i in range(N_PAIRS):
+        if args.duration_cap and (time.time() - t_start) >= args.duration_cap:
+            print(f"  [duration-cap] stopping after {i} pairs ({time.time() - t_start:.0f}s)")
+            break
 
-with open(SESSIONS_FILE, "w") as f:
-    json.dump(sessions, f, indent=2)
+        # --- benign session ---
+        duration = random.uniform(15, 30)
+        n_ports = random.choice([1, 2, 3])
+        ports = random.sample(PORT_POOL, n_ports)
+        mark(f"benign_{i}_start")
+        benign_traffic(duration, ports, victim_ips[0])
+        mark(f"benign_{i}_end")
 
-print(f"\nDone in {time.time() - t_start:.0f}s. {len(sessions)//2} session pairs saved to {SESSIONS_FILE}")
+        # --- ddos session (real hping3 SYN flood, rate-bounded) ---
+        # One randomly-chosen victim per session (rather than one fixed
+        # target for the whole run) is what gives "vary target" real
+        # coverage across multiple victims when victim_ips has >1 entry.
+        flood_duration = random.uniform(8, 20)
+        target_rate = random.uniform(10, 300)
+        port = random.choice(FLOOD_PORT_POOL)
+        victim = random.choice(victim_ips)
+        mark(f"ddos_{i}_start")
+        hping3_flood(flood_duration, port, target_rate, victim)
+        mark(f"ddos_{i}_end")
+
+        elapsed = time.time() - t_start
+        print(f"[{elapsed:6.0f}s] pair {i + 1}/{N_PAIRS} done "
+              f"(benign: {duration:.0f}s/{n_ports}ports, ddos: {flood_duration:.0f}s@{target_rate:.0f}pps -> {victim})")
+
+    with open(sessions_file, "w") as f:
+        json.dump(sessions, f, indent=2)
+
+    print(f"\nDone in {time.time() - t_start:.0f}s. {len(sessions)//2} session pairs saved to {sessions_file}")
+
+    if args.scenario_id:
+        write_provenance(
+            scenario_id=args.scenario_id,
+            threat_class="ddos",
+            attack_subtype="syn_flood",
+            source="real",
+            environment="loopback" if victim_ips == ["127.0.0.1"] else "docker_multihost",
+            label_method="controlled_generation",
+            generator="training/capture/capture_ddos.py",
+            attacker_ip=args.attacker_ip,
+            victim_ips=victim_ips,
+            configuration={"n_pairs": N_PAIRS, "rate_range_pps": [10, 300], "flood_duration_range_s": [8, 20]},
+        )
+
+
+if __name__ == "__main__":
+    main()

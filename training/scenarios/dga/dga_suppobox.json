@@ -1,0 +1,20 @@
+{
+  "scenario_id": "dga_suppobox",
+  "threat_class": "dga",
+  "is_malicious": true,
+  "attack_subtype": "dga",
+  "source": "synthetic",
+  "label_method": "generator_ground_truth",
+  "generator": "training/train_dga.py:gen_suppobox",
+  "configuration": {
+    "family": "Suppobox (published algorithm, wordlist-seeded)"
+  },
+  "expected_behavior": {
+    "entropy": "low (dictionary-like, harder DGA family)"
+  },
+  "repetitions": 2000,
+  "applies_to_datasets": [
+    "in-memory only -- train_dga.py, not persisted to a CSV"
+  ],
+  "notes": "Wordlist-based DGA -- deliberately close to benign-looking to test the harder case."
+}
